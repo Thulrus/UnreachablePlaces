@@ -1,0 +1,300 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Setup: Install Dependencies",
+      "type": "shell",
+      "command": "./setup.sh",
+      "problemMatcher": [],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "group": "none",
+      "detail": "Run setup script to create venv and install all dependencies"
+    },
+    {
+      "label": "Project: Show Info",
+      "type": "shell",
+      "command": "python3 -m src.cli info",
+      "problemMatcher": [],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": true
+      },
+      "group": "none",
+      "detail": "Display project configuration and available commands"
+    },
+    {
+      "label": "Pipeline: Run All (Complete)",
+      "type": "shell",
+      "command": "python3 -m src.cli run_all",
+      "problemMatcher": [],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "dedicated",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "detail": "Run the complete pipeline from start to finish (15-25 minutes)",
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    },
+    {
+      "label": "Pipeline: Run All (Skip Fetch)",
+      "type": "shell",
+      "command": "python3 -m src.cli run_all --skip-fetch",
+      "problemMatcher": [],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "dedicated",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "group": "build",
+      "detail": "Run pipeline skipping data download (use cached data)",
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    },
+    {
+      "label": "Step 1: Fetch Data",
+      "type": "shell",
+      "command": "python3 -m src.cli fetch_data",
+      "problemMatcher": [],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "group": "none",
+      "detail": "Download state boundary and road network data (10-20 minutes)"
+    },
+    {
+      "label": "Step 2: Preprocess Data",
+      "type": "shell",
+      "command": "python3 -m src.cli preprocess",
+      "problemMatcher": [],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "group": "none",
+      "detail": "Reproject, clip, and rasterize data (2-3 minutes)"
+    },
+    {
+      "label": "Step 3: Compute Distance Field",
+      "type": "shell",
+      "command": "python3 -m src.cli compute_distance",
+      "problemMatcher": [],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "group": "none",
+      "detail": "Calculate Euclidean distance transform (~30 seconds)"
+    },
+    {
+      "label": "Step 4: Find Unreachable Point",
+      "type": "shell",
+      "command": "python3 -m src.cli find_unreachable",
+      "problemMatcher": [],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "group": "none",
+      "detail": "Analyze and find the most unreachable location (~5 seconds)"
+    },
+    {
+      "label": "Step 5: Create Visualizations",
+      "type": "shell",
+      "command": "python3 -m src.cli visualize",
+      "problemMatcher": [],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "group": "none",
+      "detail": "Generate static and interactive maps (~1 minute)"
+    },
+    {
+      "label": "View: Open Results JSON",
+      "type": "shell",
+      "command": "cat outputs/results.json",
+      "problemMatcher": [],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": true
+      },
+      "group": "none",
+      "detail": "Display analysis results in terminal"
+    },
+    {
+      "label": "View: Open Static Map",
+      "type": "shell",
+      "command": "xdg-open outputs/maps/utah_unreachability_map.png || open outputs/maps/utah_unreachability_map.png",
+      "problemMatcher": [],
+      "presentation": {
+        "echo": true,
+        "reveal": "silent",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": false
+      },
+      "group": "none",
+      "detail": "Open static map image in default viewer"
+    },
+    {
+      "label": "View: Open Interactive Map",
+      "type": "shell",
+      "command": "xdg-open outputs/maps/utah_unreachability_interactive.html || open outputs/maps/utah_unreachability_interactive.html",
+      "problemMatcher": [],
+      "presentation": {
+        "echo": true,
+        "reveal": "silent",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": false
+      },
+      "group": "none",
+      "detail": "Open interactive map in default browser"
+    },
+    {
+      "label": "Clean: Remove Cached Data",
+      "type": "shell",
+      "command": "rm -rf data/raw/* data/processed/* outputs/*",
+      "problemMatcher": [],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "group": "none",
+      "detail": "Delete all downloaded and processed data (preserves .gitkeep files)"
+    },
+    {
+      "label": "Clean: Remove Output Maps",
+      "type": "shell",
+      "command": "rm -f outputs/maps/*.png outputs/maps/*.html outputs/results.json",
+      "problemMatcher": [],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "group": "none",
+      "detail": "Delete only output visualizations and results"
+    },
+    {
+      "label": "Dev: Run Module Tests",
+      "type": "shell",
+      "command": "python3 -m pytest tests/ -v",
+      "problemMatcher": [],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": true
+      },
+      "group": "test",
+      "detail": "Run pytest test suite (when tests are created)"
+    },
+    {
+      "label": "Dev: Format Code (Black)",
+      "type": "shell",
+      "command": "python3 -m black src/",
+      "problemMatcher": [],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "group": "none",
+      "detail": "Format all Python code with Black"
+    },
+    {
+      "label": "Dev: Lint Code (Flake8)",
+      "type": "shell",
+      "command": "python3 -m flake8 src/ --max-line-length=100",
+      "problemMatcher": [],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": false
+      },
+      "group": "none",
+      "detail": "Check code style with Flake8"
+    },
+    {
+      "label": "Help: Show CLI Help",
+      "type": "shell",
+      "command": "python3 -m src.cli --help",
+      "problemMatcher": [],
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared",
+        "showReuseMessage": true,
+        "clear": true
+      },
+      "group": "none",
+      "detail": "Display all available CLI commands and options"
+    }
+  ]
+}

@@ -33,12 +33,13 @@ venv.bak/
 poetry.lock
 
 # IDEs
-.vscode/
 .idea/
 *.swp
 *.swo
 *~
 .DS_Store
+
+# Note: .vscode/ is included in the repo for project-specific tasks and settings
 
 # Jupyter Notebook
 .ipynb_checkpoints

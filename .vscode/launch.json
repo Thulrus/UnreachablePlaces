@@ -1,0 +1,116 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python: Show Info",
+      "type": "python",
+      "request": "launch",
+      "module": "src.cli",
+      "args": ["info"],
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Python: Run Pipeline (Complete)",
+      "type": "python",
+      "request": "launch",
+      "module": "src.cli",
+      "args": ["run_all"],
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Python: Run Pipeline (Skip Fetch)",
+      "type": "python",
+      "request": "launch",
+      "module": "src.cli",
+      "args": ["run_all", "--skip-fetch"],
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Python: Fetch Data",
+      "type": "python",
+      "request": "launch",
+      "module": "src.cli",
+      "args": ["fetch_data"],
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Python: Preprocess",
+      "type": "python",
+      "request": "launch",
+      "module": "src.cli",
+      "args": ["preprocess"],
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Python: Compute Distance",
+      "type": "python",
+      "request": "launch",
+      "module": "src.cli",
+      "args": ["compute_distance"],
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Python: Find Unreachable",
+      "type": "python",
+      "request": "launch",
+      "module": "src.cli",
+      "args": ["find_unreachable"],
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Python: Visualize",
+      "type": "python",
+      "request": "launch",
+      "module": "src.cli",
+      "args": ["visualize"],
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Python: Debug Current File",
+      "type": "python",
+      "request": "launch",
+      "program": "${file}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Python: Custom Config",
+      "type": "python",
+      "request": "launch",
+      "module": "src.cli",
+      "args": [
+        "--config",
+        "${input:configFile}",
+        "run_all"
+      ],
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "cwd": "${workspaceFolder}"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "configFile",
+      "type": "promptString",
+      "description": "Path to configuration file",
+      "default": "config.yaml"
+    }
+  ]
+}
