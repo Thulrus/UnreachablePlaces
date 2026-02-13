@@ -1,0 +1,59 @@
+# Default configuration for Utah
+state:
+  name: "Utah"
+  fips_code: "49"  # Utah FIPS code
+
+projection:
+  # EPSG:5070 - NAD83 / Conus Albers (distance-preserving for CONUS)
+  crs: "EPSG:5070"
+  
+raster:
+  # Resolution in meters
+  resolution: 250
+  
+data:
+  # OpenStreetMap road types to include
+  road_types:
+    - "motorway"
+    - "trunk"
+    - "primary"
+    - "secondary"
+    - "tertiary"
+    - "unclassified"
+    - "residential"
+    - "motorway_link"
+    - "trunk_link"
+    - "primary_link"
+    - "secondary_link"
+    - "tertiary_link"
+  
+  # Optional: include settlements
+  include_settlements: false
+  
+paths:
+  # Relative to project root
+  raw_data: "data/raw"
+  processed_data: "data/processed"
+  outputs: "outputs"
+  maps: "outputs/maps"
+  
+output:
+  # Save intermediate results
+  save_intermediate: true
+  
+  # Output formats
+  static_map: true
+  interactive_map: true
+  
+  # Results file
+  results_file: "outputs/results.json"
+  
+visualization:
+  # Colormap for distance heatmap
+  colormap: "YlOrRd"
+  
+  # Figure size (inches)
+  figsize: [12, 10]
+  
+  # DPI for static maps
+  dpi: 300
