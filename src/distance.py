@@ -1,15 +1,19 @@
 """
 Distance computation module.
 
-This module computes Euclidean distance fields from rasterized features.
+This module computes distance fields from rasterized features.
+Supports both Euclidean distance and cost-weighted distance transforms.
 """
 import numpy as np
 from scipy.ndimage import distance_transform_edt
 import rasterio
 from pathlib import Path
 from typing import Tuple, Optional
+import logging
 
 from .config import get_config
+
+logger = logging.getLogger(__name__)
 
 
 class DistanceCalculator:
@@ -61,6 +65,71 @@ class DistanceCalculator:
         
         print(f"  Max distance: {max_distance:.2f} m ({max_distance/1000:.2f} km)")
         print(f"  Mean distance: {mean_distance:.2f} m ({mean_distance/1000:.2f} km)")
+        
+        return distance_meters
+    
+    def compute_cost_distance_field(self, mask: np.ndarray, cost_surface: np.ndarray,
+                                   resolution: Optional[int] = None) -> np.ndarray:
+        """
+        Compute cost-weighted distance transform from binary mask.
+        
+        Uses MCP (Minimum Cost Path) algorithm to compute least-cost distances
+        that account for terrain difficulty.
+        
+        Args:
+            mask: Binary mask array (1 = feature/road, 0 = background)
+            cost_surface: Cost surface array (relative traversal costs)
+            resolution: Pixel resolution in meters. If None, uses config value.
+            
+        Returns:
+            Cost-distance field array where each pixel contains cost-distance to nearest feature
+        """
+        try:
+            from skimage.graph import MCP
+        except ImportError:
+            raise ImportError(
+                "scikit-image is required for cost-distance calculations. "
+                "Install with: pip install scikit-image"
+            )
+        
+        resolution = resolution or self.config.resolution
+        
+        print(f"Computing cost-distance field...")
+        print(f"  Input shape: {mask.shape}")
+        print(f"  Cost surface range: {cost_surface.min():.2f} to {cost_surface.max():.2f}")
+        print(f"  Resolution: {resolution}m per pixel")
+        print("  (This may take several minutes...)")
+        
+        # Find all road pixels as starting points
+        road_pixels = np.argwhere(mask == 1)
+        
+        if len(road_pixels) == 0:
+            raise ValueError("No road pixels found in mask")
+        
+        print(f"  Computing from {len(road_pixels):,} road pixels")
+        
+        # Create MCP object with cost surface
+        # MCP expects costs as accumulated_cost = sum(costs along path)
+        # We multiply base distance by cost factors
+        mcp = MCP(cost_surface, fully_connected=True)
+        
+        # Compute cumulative cost from all road pixels
+        # This gives us the minimum cost to reach any pixel from nearest road
+        cumulative_costs, _ = mcp.find_costs(road_pixels)
+        
+        # Convert cost units to approximate distance units
+        # The cumulative cost is in "cost units" which roughly correspond to
+        # distance × terrain_difficulty_factor
+        # For display purposes, we scale by resolution to get "effective distance"
+        distance_meters = cumulative_costs * resolution
+        
+        # Statistics
+        max_distance = np.max(distance_meters[np.isfinite(distance_meters)])
+        mean_distance = np.mean(distance_meters[np.isfinite(distance_meters)])
+        
+        print(f"  Max cost-distance: {max_distance:.2f} m ({max_distance/1000:.2f} km)")
+        print(f"  Mean cost-distance: {mean_distance:.2f} m ({mean_distance/1000:.2f} km)")
+        print(f"  Note: Cost-distance is 'effective distance' accounting for terrain")
         
         return distance_meters
     
@@ -166,6 +235,8 @@ class DistanceCalculator:
         """
         Run full distance computation pipeline.
         
+        Automatically selects Euclidean or cost-distance mode based on configuration.
+        
         Args:
             processed_data: Dictionary with processed data from preprocessing
             
@@ -180,9 +251,36 @@ class DistanceCalculator:
         metadata = processed_data['raster_metadata']
         boundary = processed_data['boundary']
         
+        # Check if cost-distance is enabled
+        use_cost_distance = self.config.get('cost_distance.enabled', False)
+        
+        if use_cost_distance:
+            print("\nMode: COST-DISTANCE (terrain-aware)")
+            print("Loading cost surface...")
+            
+            # Load cost surface
+            state_name = self.config.state_name.lower()
+            processed_path = self.config.get_path('processed_data')
+            cost_surface_path = processed_path / f"{state_name}_cost_surface.tif"
+            
+            if not cost_surface_path.exists():
+                print(f"Warning: Cost surface not found at {cost_surface_path}")
+                print("Falling back to Euclidean distance...")
+                print("Run 'cost-surface' command first to enable cost-distance mode.")
+                use_cost_distance = False
+            else:
+                with rasterio.open(cost_surface_path) as src:
+                    cost_surface = src.read(1)
+                print(f"  Cost surface loaded: {cost_surface.shape}")
+        
         # Compute distance field
-        print("\n1. Computing Euclidean distance transform...")
-        distance_field = self.compute_distance_field(road_mask)
+        if use_cost_distance:
+            print("\n1. Computing cost-weighted distance transform...")
+            distance_field = self.compute_cost_distance_field(road_mask, cost_surface)
+        else:
+            print("\nMode: EUCLIDEAN (straight-line distance)")
+            print("\n1. Computing Euclidean distance transform...")
+            distance_field = self.compute_distance_field(road_mask)
         
         # Create boundary mask
         print("\n2. Creating boundary mask...")
@@ -200,7 +298,14 @@ class DistanceCalculator:
         if self.config.get('output.save_intermediate', True):
             print("\n4. Saving distance raster...")
             state_name = self.config.state_name.lower()
-            output_path = self.config.get_path('processed_data') / f"{state_name}_distance.tif"
+            
+            # Use different filename for cost-distance vs euclidean
+            if use_cost_distance:
+                output_filename = f"{state_name}_distance_cost.tif"
+            else:
+                output_filename = f"{state_name}_distance.tif"
+            
+            output_path = self.config.get_path('processed_data') / output_filename
             self.save_distance_raster(distance_masked, metadata, output_path)
         
         print("=" * 60)
@@ -210,7 +315,8 @@ class DistanceCalculator:
         return {
             'distance_field': distance_masked,
             'boundary_mask': boundary_mask,
-            'metadata': metadata
+            'metadata': metadata,
+            'mode': 'cost-distance' if use_cost_distance else 'euclidean'
         }
 
 
