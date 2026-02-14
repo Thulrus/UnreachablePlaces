@@ -422,7 +422,7 @@ class Visualizer:
         n = len(top_n_points)
         
         topn_layer = folium.FeatureGroup(name=f'Top {n} Unreachable Points',
-                                          show=False)
+                                          show=True)
 
         for point in top_n_points:
             rank = point['rank']
@@ -430,17 +430,36 @@ class Visualizer:
             lon = point['longitude']
             dist_km = point['distance_km']
 
-            color = 'red' if rank == 1 else 'orange' if rank <= 3 else 'lightred'
+            # Color scheme: red for #1, orange for #2-3, lighter for rest
+            if rank == 1:
+                color = 'red'
+                icon_color = 'white'
+            elif rank <= 3:
+                color = 'orange'
+                icon_color = 'white'
+            else:
+                color = 'lightred'
+                icon_color = 'white'
 
-            folium.CircleMarker(
+            # Use numbered markers for top N
+            folium.Marker(
                 location=[lat, lon],
-                radius=10 - rank * 0.5 if rank <= 10 else 5,
-                popup=f"<b>Rank #{rank}</b><br>Distance: {dist_km:.2f} km",
-                tooltip=f"#{rank}: {dist_km:.2f} km",
-                color=color,
-                fill=True,
-                fillColor=color,
-                fillOpacity=0.7).add_to(topn_layer)
+                popup=folium.Popup(
+                    f"<b>Rank #{rank}</b><br>"
+                    f"Distance: {dist_km:.2f} km<br>"
+                    f"Lat: {lat:.6f}<br>"
+                    f"Lon: {lon:.6f}",
+                    max_width=300
+                ),
+                tooltip=f"#{rank}: {dist_km:.2f} km from road",
+                icon=folium.plugins.BeautifyIcon(
+                    number=str(rank),
+                    border_color=color,
+                    background_color=color,
+                    text_color=icon_color,
+                    inner_icon_style='margin-top:0;'
+                )
+            ).add_to(topn_layer)
 
         topn_layer.add_to(m)
 
