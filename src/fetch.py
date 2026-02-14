@@ -271,11 +271,11 @@ class DataFetcher:
                     raise ValueError("No DEM data available for this region")
 
             print(f"Found {len(items)} DEM tiles to download")
-            
+
             # Use project's data directory for temp files (not system /tmp which may be small)
             temp_dir = self.config.get_path('raw_data') / 'temp_dem'
             temp_dir.mkdir(exist_ok=True)
-            
+
             # Process in batches to avoid filling disk
             batch_size = 20  # Process 20 tiles at a time
             all_tiles = []
@@ -284,10 +284,12 @@ class DataFetcher:
                 for batch_start in range(0, len(items), batch_size):
                     batch_end = min(batch_start + batch_size, len(items))
                     batch_items = items[batch_start:batch_end]
-                    
-                    print(f"\nProcessing batch {batch_start//batch_size + 1} (tiles {batch_start+1}-{batch_end})...")
+
+                    print(
+                        f"\nProcessing batch {batch_start//batch_size + 1} (tiles {batch_start+1}-{batch_end})..."
+                    )
                     tile_paths = []
-                    
+
                     # Download batch
                     for i, item in enumerate(batch_items):
                         download_url = item.get('downloadURL')
@@ -305,13 +307,16 @@ class DataFetcher:
                         tile_path = temp_dir / f"tile_{tile_num}.tif"
 
                         with open(tile_path, 'wb') as f:
-                            for chunk in tile_response.iter_content(chunk_size=8192):
+                            for chunk in tile_response.iter_content(
+                                    chunk_size=8192):
                                 f.write(chunk)
 
                         tile_paths.append(tile_path)
-                    
+
                     all_tiles.extend(tile_paths)
-                    print(f"  Batch {batch_start//batch_size + 1} downloaded ({len(tile_paths)} tiles)")
+                    print(
+                        f"  Batch {batch_start//batch_size + 1} downloaded ({len(tile_paths)} tiles)"
+                    )
 
                 # Merge all tiles
                 print(f"\nMerging {len(all_tiles)} tiles...")
@@ -413,14 +418,14 @@ class DataFetcher:
         try:
             # NLCD 2021 CONUS land cover
             # Note: Direct download URLs may change. Check https://www.mrlc.gov/data
-            
+
             # Try multiple possible URLs
             possible_urls = [
                 "https://s3-us-west-2.amazonaws.com/mrlc/nlcd_2021_land_cover_l48_20230630.zip",
                 "https://s3.us-west-2.amazonaws.com/mrlc/nlcd_2021_land_cover_l48_20230630.zip",
                 "https://mrlc.s3.us-west-2.amazonaws.com/nlcd_2021_land_cover_l48_20230630.zip",
             ]
-            
+
             url = None
             for test_url in possible_urls:
                 try:
@@ -434,7 +439,7 @@ class DataFetcher:
                         print(f"  ✗ Got status {test_response.status_code}")
                 except Exception as e:
                     print(f"  ✗ Failed: {e}")
-            
+
             if not url:
                 print("\nAutomatic download not available.")
                 print("Please download NLCD 2021 data manually:")
@@ -442,8 +447,11 @@ class DataFetcher:
                 print("2. Click 'NLCD 2021 Land Cover (CONUS)'")
                 print("3. Download the GeoTIFF (CONUS)")
                 print("4. Extract and clip to state boundary using:")
-                print(f"   gdalwarp -cutline <boundary_file> -crop_to_cutline \\")
-                print(f"            nlcd_2021_land_cover_l48.tif {output_path}")
+                print(
+                    f"   gdalwarp -cutline <boundary_file> -crop_to_cutline \\"
+                )
+                print(
+                    f"            nlcd_2021_land_cover_l48.tif {output_path}")
                 print(f"\nOr place the full CONUS file at: {output_path}")
                 raise ValueError("No working download URL found for NLCD data")
 
@@ -520,11 +528,13 @@ class DataFetcher:
 
         except Exception as e:
             print(f"Error fetching land cover: {e}")
-            print("\nLand cover download failed. Manual download instructions:")
+            print(
+                "\nLand cover download failed. Manual download instructions:")
             print("1. Visit: https://www.mrlc.gov/data")
             print("2. Select 'NLCD 2021 Land Cover (CONUS)'")
             print("3. Download the full CONUS GeoTIFF")
-            print("4. Clip to state boundary (optional) or place full file at:")
+            print(
+                "4. Clip to state boundary (optional) or place full file at:")
             print(f"   {output_path}")
             print("\nThen run the pipeline again.")
             raise
