@@ -10,6 +10,7 @@ from pathlib import Path
 from .config import Config, get_config, set_config
 from .fetch import DataFetcher
 from .preprocess import DataPreprocessor
+from .cost_surface import CostSurfaceGenerator
 from .distance import DistanceCalculator
 from .analyze import UnreachabilityAnalyzer
 from .visualize import Visualizer
@@ -97,6 +98,55 @@ def preprocess(ctx):
         return 0
     except Exception as e:
         click.echo(f"\n✗ Error: {e}", err=True)
+        return 1
+
+
+@cli.command()
+@click.pass_context
+def cost_surface(ctx):
+    """Generate cost surface from DEM and land cover (for cost-distance analysis)."""
+    click.echo("=" * 60)
+    click.echo("GENERATING COST SURFACE")
+    click.echo("=" * 60)
+    
+    try:
+        config = ctx.obj['config']
+        
+        # Check if cost-distance is enabled
+        if not config.get('cost_distance.enabled', False):
+            click.echo("✗ Cost-distance is not enabled in configuration.", err=True)
+            click.echo("  Set 'cost_distance.enabled: true' in config.yaml", err=True)
+            return 1
+        
+        # Check if DEM and land cover exist
+        state_name = config.state_name.lower()
+        raw_data_path = config.get_path('raw_data')
+        
+        dem_file = raw_data_path / f"{state_name}_dem.tif"
+        landcover_file = raw_data_path / f"{state_name}_landcover.tif"
+        
+        if not dem_file.exists():
+            click.echo(f"✗ DEM not found: {dem_file}", err=True)
+            click.echo("  Run 'fetch-data' with cost_distance.enabled: true first.", err=True)
+            return 1
+        
+        if not landcover_file.exists():
+            click.echo(f"✗ Land cover not found: {landcover_file}", err=True)
+            click.echo("  Run 'fetch-data' with cost_distance.enabled: true first.", err=True)
+            return 1
+        
+        # Generate cost surface
+        generator = CostSurfaceGenerator()
+        cost_path = generator.process_state(config.state_name)
+        
+        click.echo("\n✓ Cost surface generation complete!")
+        click.echo(f"  Output: {cost_path}")
+        
+        return 0
+    except Exception as e:
+        click.echo(f"\n✗ Error: {e}", err=True)
+        import traceback
+        traceback.print_exc()
         return 1
 
 
@@ -332,6 +382,17 @@ def run_all(ctx, skip_fetch):
         preprocessor = DataPreprocessor(config)
         processed = preprocessor.preprocess_all(data)
         
+        # Step 2.5: Generate cost surface if cost-distance enabled
+        if config.get('cost_distance.enabled', False):
+            click.echo("\n[2.5/5] Generating cost surface...")
+            try:
+                generator = CostSurfaceGenerator()
+                cost_path = generator.process_state(config.state_name)
+                click.echo(f"  Cost surface: {cost_path}")
+            except Exception as e:
+                click.echo(f"  Warning: Could not generate cost surface: {e}")
+                click.echo("  Continuing with Euclidean distance...")
+        
         # Step 3: Compute distance
         click.echo("\n[3/5] Computing distance field...")
         calculator = DistanceCalculator(config)
@@ -398,12 +459,13 @@ def info():
             click.echo(f"  ... and {len(config.road_types) - 5} more")
         
         click.echo("\nAvailable commands:")
-        click.echo("  fetch_data       - Download geospatial data")
+        click.echo("  fetch-data       - Download geospatial data")
         click.echo("  preprocess       - Process and rasterize data")
-        click.echo("  compute_distance - Calculate distance fields")
-        click.echo("  find_unreachable - Find most remote location")
+        click.echo("  cost-surface     - Generate cost surface (if cost-distance enabled)")
+        click.echo("  compute-distance - Calculate distance fields")
+        click.echo("  find-unreachable - Find most remote location")
         click.echo("  visualize        - Create maps and visualizations")
-        click.echo("  run_all          - Execute complete pipeline")
+        click.echo("  run-all          - Execute complete pipeline")
         
     except Exception as e:
         click.echo(f"Error: {e}", err=True)

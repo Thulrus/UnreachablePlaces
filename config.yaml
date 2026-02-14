@@ -56,6 +56,43 @@ analysis:
   # Minimum separation distance between top locations (km)
   # This prevents all top N from being clustered in the same area
   min_separation_km: 25
+
+cost_distance:
+  # Enable terrain-aware cost-distance analysis
+  # When false (default), uses simple Euclidean distance
+  # When true, incorporates slope and land cover factors
+  enabled: false
+  
+  # Resolution for cost surface calculations (meters)
+  # Should match raster.resolution for consistency
+  resolution_m: 250
+  
+  # Digital Elevation Model configuration
+  dem:
+    source: "USGS_3DEP"  # 1/3 arc-second (~10m) elevation data
+    url_template: "https://prd-tnm.s3.amazonaws.com/index.html?prefix=StagedProducts/Elevation/13/TIFF/"
+  
+  # Land cover configuration  
+  landcover:
+    source: "NLCD_2021"  # National Land Cover Database
+    url: "https://s3-us-west-2.amazonaws.com/mrlc/nlcd_2021_land_cover_l48_20230630.zip"
+  
+  # Cost factor weights
+  factors:
+    # Slope weight: 1.0 = full slope penalty, 0.0 = ignore slope
+    slope_weight: 1.0
+    
+    # Land cover weight: 1.0 = full land cover penalty, 0.0 = ignore land cover
+    landcover_weight: 1.0
+  
+  # Slope cost function parameters
+  slope:
+    # Slope thresholds (degrees) and multipliers
+    # Linear interpolation between thresholds
+    flat: 1.0        # 0° slope: no penalty
+    moderate: 2.0    # 15° slope: 2x cost
+    steep: 4.0       # 30° slope: 4x cost  
+    very_steep: 10.0 # 45°+ slope: 10x cost
   
 visualization:
   # Colormap for distance heatmap

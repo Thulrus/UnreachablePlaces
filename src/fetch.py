@@ -5,14 +5,22 @@ This module handles:
 - Downloading state boundary from US Census TIGER
 - Fetching road network from OpenStreetMap
 - Optionally fetching settlement data
+- Downloading DEM (Digital Elevation Model) from USGS 3DEP
+- Downloading land cover from NLCD
 """
 import os
 import geopandas as gpd
 import osmnx as ox
 import requests
+import zipfile
+import rasterio
+from rasterio.merge import merge
+from rasterio.mask import mask
 from pathlib import Path
 from typing import Optional
 from tqdm import tqdm
+import tempfile
+import shutil
 
 from .config import get_config
 
@@ -183,12 +191,269 @@ class DataFetcher:
             print("Continuing without settlements...")
             return gpd.GeoDataFrame()
     
+    def fetch_dem(self, boundary: Optional[gpd.GeoDataFrame] = None) -> str:
+        """
+        Fetch Digital Elevation Model from USGS 3DEP.
+        
+        Uses the National Map API to download 1/3 arc-second (~10m) elevation data.
+        
+        Args:
+            boundary: GeoDataFrame with boundary polygon. If None, fetches it first.
+            
+        Returns:
+            Path to merged DEM file
+        """
+        if boundary is None:
+            boundary = self.fetch_state_boundary()
+        
+        state_name = self.config.state_name
+        output_path = self.config.get_path('raw_data') / f"{state_name.lower()}_dem.tif"
+        
+        # Check if already exists
+        if output_path.exists():
+            print(f"DEM already exists at {output_path}")
+            return str(output_path)
+        
+        print(f"Fetching DEM for {state_name} from USGS 3DEP...")
+        print("This may take several minutes and require significant bandwidth...")
+        
+        try:
+            # Get boundary in WGS84
+            boundary_wgs84 = boundary.to_crs('EPSG:4326')
+            bounds = boundary_wgs84.total_bounds  # minx, miny, maxx, maxy
+            
+            # Use The National Map API
+            # https://apps.nationalmap.gov/tnmaccess/#/
+            base_url = "https://tnmaccess.nationalmap.gov/api/v1/products"
+            
+            params = {
+                'datasets': 'National Elevation Dataset (NED) 1/3 arc-second',
+                'bbox': f"{bounds[0]},{bounds[1]},{bounds[2]},{bounds[3]}",
+                'prodFormats': 'GeoTIFF',
+                'max': 100  # Maximum number of tiles
+            }
+            
+            print(f"Querying National Map API for DEM tiles...")
+            response = requests.get(base_url, params=params)
+            response.raise_for_status()
+            
+            results = response.json()
+            items = results.get('items', [])
+            
+            if not items:
+                print("No DEM tiles found. Trying alternative dataset...")
+                # Try 1 arc-second data as fallback
+                params['datasets'] = 'National Elevation Dataset (NED) 1 arc-second'
+                response = requests.get(base_url, params=params)
+                response.raise_for_status()
+                results = response.json()
+                items = results.get('items', [])
+                
+                if not items:
+                    raise ValueError("No DEM data available for this region")
+            
+            print(f"Found {len(items)} DEM tiles to download")
+            
+            # Download tiles to temporary directory
+            temp_dir = tempfile.mkdtemp()
+            tile_paths = []
+            
+            try:
+                for i, item in enumerate(items):
+                    download_url = item.get('downloadURL')
+                    if not download_url:
+                        continue
+                    
+                    print(f"Downloading tile {i+1}/{len(items)}...")
+                    
+                    # Download file
+                    tile_response = requests.get(download_url, stream=True)
+                    tile_response.raise_for_status()
+                    
+                    # Save to temp file
+                    tile_path = Path(temp_dir) / f"tile_{i}.tif"
+                    
+                    with open(tile_path, 'wb') as f:
+                        for chunk in tile_response.iter_content(chunk_size=8192):
+                            f.write(chunk)
+                    
+                    tile_paths.append(tile_path)
+                
+                # Merge tiles
+                print(f"Merging {len(tile_paths)} tiles...")
+                src_files = [rasterio.open(str(p)) for p in tile_paths]
+                
+                mosaic, out_trans = merge(src_files)
+                
+                # Close source files
+                for src in src_files:
+                    src.close()
+                
+                # Get profile from first tile
+                with rasterio.open(tile_paths[0]) as src:
+                    out_meta = src.profile.copy()
+                
+                # Update profile for merged raster
+                out_meta.update({
+                    "driver": "GTiff",
+                    "height": mosaic.shape[1],
+                    "width": mosaic.shape[2],
+                    "transform": out_trans,
+                    "compress": "lzw"
+                })
+                
+                # Clip to boundary and save
+                print("Clipping DEM to state boundary...")
+                boundary_proj = boundary.to_crs(out_meta['crs'])
+                
+                with rasterio.MemoryFile() as memfile:
+                    with memfile.open(**out_meta) as mem_dataset:
+                        mem_dataset.write(mosaic)
+                    
+                    with memfile.open() as mem_dataset:
+                        clipped, clip_trans = mask(
+                            mem_dataset,
+                            boundary_proj.geometry,
+                            crop=True,
+                            all_touched=True
+                        )
+                        
+                        clip_meta = mem_dataset.profile.copy()
+                        clip_meta.update({
+                            "height": clipped.shape[1],
+                            "width": clipped.shape[2],
+                            "transform": clip_trans
+                        })
+                
+                # Save clipped raster
+                with rasterio.open(output_path, 'w', **clip_meta) as dst:
+                    dst.write(clipped)
+                
+                print(f"Saved DEM to {output_path}")
+                
+            finally:
+                # Clean up temp directory
+                shutil.rmtree(temp_dir)
+            
+            return str(output_path)
+            
+        except Exception as e:
+            print(f"Error fetching DEM: {e}")
+            print("You may need to download DEM data manually from:")
+            print("https://apps.nationalmap.gov/downloader/")
+            raise
+    
+    def fetch_landcover(self, boundary: Optional[gpd.GeoDataFrame] = None) -> str:
+        """
+        Fetch land cover data from NLCD (National Land Cover Database).
+        
+        Downloads NLCD 2021 30m resolution land cover.
+        
+        Args:
+            boundary: GeoDataFrame with boundary polygon. If None, fetches it first.
+            
+        Returns:
+            Path to clipped land cover file
+        """
+        if boundary is None:
+            boundary = self.fetch_state_boundary()
+        
+        state_name = self.config.state_name
+        output_path = self.config.get_path('raw_data') / f"{state_name.lower()}_landcover.tif"
+        
+        # Check if already exists
+        if output_path.exists():
+            print(f"Land cover already exists at {output_path}")
+            return str(output_path)
+        
+        print(f"Fetching land cover for {state_name} from NLCD...")
+        print("This will download ~1-2GB of data and may take some time...")
+        
+        try:
+            # NLCD 2021 CONUS land cover
+            # https://www.mrlc.gov/data
+            url = "https://s3-us-west-2.amazonaws.com/mrlc/nlcd_2021_land_cover_l48_20230630.zip"
+            
+            # Download to temporary directory
+            temp_dir = tempfile.mkdtemp()
+            zip_path = Path(temp_dir) / "nlcd_2021.zip"
+            
+            try:
+                print("Downloading NLCD 2021 data...")
+                print("(This is a large file and may take 10-30 minutes)")
+                
+                response = requests.get(url, stream=True)
+                response.raise_for_status()
+                
+                total_size = int(response.headers.get('content-length', 0))
+                
+                with open(zip_path, 'wb') as f:
+                    with tqdm(total=total_size, unit='B', unit_scale=True) as pbar:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            f.write(chunk)
+                            pbar.update(len(chunk))
+                
+                print("Extracting archive...")
+                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                    zip_ref.extractall(temp_dir)
+                
+                # Find the .tif file in extracted files
+                tif_files = list(Path(temp_dir).glob("**/*.tif"))
+                
+                if not tif_files:
+                    raise FileNotFoundError("No .tif file found in NLCD archive")
+                
+                nlcd_path = tif_files[0]
+                print(f"Found land cover file: {nlcd_path.name}")
+                
+                # Clip to boundary
+                print("Clipping land cover to state boundary...")
+                
+                with rasterio.open(nlcd_path) as src:
+                    # Reproject boundary to match raster CRS
+                    boundary_proj = boundary.to_crs(src.crs)
+                    
+                    # Clip
+                    clipped, clip_trans = mask(
+                        src,
+                        boundary_proj.geometry,
+                        crop=True,
+                        all_touched=True
+                    )
+                    
+                    # Update metadata
+                    clip_meta = src.profile.copy()
+                    clip_meta.update({
+                        "height": clipped.shape[1],
+                        "width": clipped.shape[2],
+                        "transform": clip_trans,
+                        "compress": "lzw"
+                    })
+                    
+                    # Save
+                    with rasterio.open(output_path, 'w', **clip_meta) as dst:
+                        dst.write(clipped)
+                
+                print(f"Saved land cover to {output_path}")
+                
+            finally:
+                # Clean up temp directory
+                shutil.rmtree(temp_dir)
+            
+            return str(output_path)
+            
+        except Exception as e:
+            print(f"Error fetching land cover: {e}")
+            print("You may need to download NLCD data manually from:")
+            print("https://www.mrlc.gov/data")
+            raise
+    
     def fetch_all(self) -> dict:
         """
         Fetch all required data.
         
         Returns:
-            Dictionary with 'boundary', 'roads', and optionally 'settlements' GeoDataFrames
+            Dictionary with 'boundary', 'roads', and optionally 'settlements', 'dem', 'landcover'
         """
         print("=" * 60)
         print("FETCHING ALL DATA")
@@ -210,6 +475,22 @@ class DataFetcher:
             settlements = self.fetch_settlements(boundary)
             if len(settlements) > 0:
                 data['settlements'] = settlements
+        
+        # Fetch DEM and land cover if cost-distance is enabled
+        if self.config.get('cost_distance.enabled', False):
+            print("\nCost-distance mode enabled. Fetching terrain data...")
+            
+            try:
+                dem_path = self.fetch_dem(boundary)
+                data['dem'] = dem_path
+            except Exception as e:
+                print(f"Warning: Could not fetch DEM: {e}")
+            
+            try:
+                landcover_path = self.fetch_landcover(boundary)
+                data['landcover'] = landcover_path
+            except Exception as e:
+                print(f"Warning: Could not fetch land cover: {e}")
         
         print("=" * 60)
         print("DATA FETCH COMPLETE")
