@@ -61,7 +61,7 @@ cost_distance:
   # Enable terrain-aware cost-distance analysis
   # When false (default), uses simple Euclidean distance
   # When true, incorporates slope and land cover factors
-  enabled: true
+  enabled: false
   
   # Resolution for cost surface calculations (meters)
   # Should match raster.resolution for consistency

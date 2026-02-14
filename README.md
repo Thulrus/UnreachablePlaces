@@ -220,15 +220,31 @@ To analyze a different state:
 - Located in remote desert or mountain regions
 - Mean distance: ~2-5 km statewide
 
-## 🔮 Future Enhancements (Planned)
+## 🔮 Future Enhancements
 
-### Phase 2 Features (Not Yet Implemented)
-- **Cost-distance** using DEM slope data
-- **Land cover penalties** (water bodies, difficult terrain)
-- **Travel-time modeling**
+### Cost-Distance Analysis (Implemented - Manual Data Required)
+
+The project now includes **optional cost-distance analysis** that accounts for terrain difficulty:
+- **Slope-based costs** - Steeper terrain = harder to traverse
+- **Land cover costs** - Water, forests, developed areas have different traversal difficulty
+- **Realistic accessibility** - More accurate than straight-line distance
+
+**Status:** Infrastructure complete, but automatic terrain data download is currently unreliable.
+
+**To enable:**
+1. Download terrain data manually (see `TERRAIN_DATA.md`)
+2. Or run helper script: `./download_terrain_data.py`
+3. Set `cost_distance.enabled: true` in `config.yaml`
+4. Run: `python -m src.cli cost-surface` then `python -m src.cli run-all`
+
+**Note:** Euclidean distance (default) works fine without terrain data.
+
+### Phase 2 Features (Planned)
+- **Travel-time modeling** based on terrain
 - **Settlement integration** in distance calculations
 - **Batch processing** for all US states
 - **GPU acceleration** for large rasters
+- **Route finding** to unreachable points
 
 ### Architecture Design Choices
 
