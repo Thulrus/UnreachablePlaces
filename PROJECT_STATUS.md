@@ -60,7 +60,7 @@ pip install -r requirements.txt
 python -m src.cli info
 
 # Run full pipeline (will take 15-25 minutes first time)
-python -m src.cli run_all
+python -m src.cli run-all
 ```
 
 ### 3. View Results
@@ -143,13 +143,13 @@ After running the pipeline:
 python -m src.cli --help
 
 # Run complete pipeline
-python -m src.cli run_all
+python -m src.cli run-all
 
 # Run individual steps
-python -m src.cli fetch_data
+python -m src.cli fetch-data
 python -m src.cli preprocess
-python -m src.cli compute_distance
-python -m src.cli find_unreachable
+python -m src.cli compute-distance
+python -m src.cli find-unreachable
 python -m src.cli visualize
 ```
 
@@ -160,7 +160,7 @@ cp config.yaml config_colorado.yaml
 # Edit config_colorado.yaml to set state to Colorado
 
 # Run with custom config
-python -m src.cli --config config_colorado.yaml run_all
+python -m src.cli --config config_colorado.yaml run-all
 ```
 
 ### Python API

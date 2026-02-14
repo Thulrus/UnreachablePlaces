@@ -45,13 +45,13 @@ poetry install
 
 ```bash
 # Run everything at once
-python -m src.cli run_all
+python -m src.cli run-all
 
 # Or run individual steps
-python -m src.cli fetch_data
+python -m src.cli fetch-data
 python -m src.cli preprocess
-python -m src.cli compute_distance
-python -m src.cli find_unreachable
+python -m src.cli compute-distance
+python -m src.cli find-unreachable
 python -m src.cli visualize
 ```
 
@@ -163,20 +163,20 @@ visualization:
 python -m src.cli info
 
 # Run complete pipeline
-python -m src.cli run_all
+python -m src.cli run-all
 
 # Individual steps
-python -m src.cli fetch_data          # Download data
+python -m src.cli fetch-data          # Download data
 python -m src.cli preprocess          # Process and rasterize
-python -m src.cli compute_distance    # Calculate distance field
-python -m src.cli find_unreachable    # Find most remote point
+python -m src.cli compute-distance    # Calculate distance field
+python -m src.cli find-unreachable    # Find most remote point
 python -m src.cli visualize           # Create maps
 
 # Use custom config
-python -m src.cli --config custom_config.yaml run_all
+python -m src.cli --config custom_config.yaml run-all
 
 # Skip data fetch if already downloaded
-python -m src.cli run_all --skip-fetch
+python -m src.cli run-all --skip-fetch
 ```
 
 ## 🔧 Adding Another State
@@ -194,7 +194,7 @@ To analyze a different state:
 
 2. **Run with custom config:**
    ```bash
-   python -m src.cli --config config_california.yaml run_all
+   python -m src.cli --config config_california.yaml run-all
    ```
 
 3. **Or edit** `config.yaml` directly to change the default state.

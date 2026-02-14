@@ -16,7 +16,7 @@
       "type": "python",
       "request": "launch",
       "module": "src.cli",
-      "args": ["run_all"],
+      "args": ["run-all"],
       "console": "integratedTerminal",
       "justMyCode": true,
       "cwd": "${workspaceFolder}"
@@ -26,7 +26,7 @@
       "type": "python",
       "request": "launch",
       "module": "src.cli",
-      "args": ["run_all", "--skip-fetch"],
+      "args": ["run-all", "--skip-fetch"],
       "console": "integratedTerminal",
       "justMyCode": true,
       "cwd": "${workspaceFolder}"
@@ -36,7 +36,7 @@
       "type": "python",
       "request": "launch",
       "module": "src.cli",
-      "args": ["fetch_data"],
+      "args": ["fetch-data"],
       "console": "integratedTerminal",
       "justMyCode": true,
       "cwd": "${workspaceFolder}"
@@ -56,7 +56,7 @@
       "type": "python",
       "request": "launch",
       "module": "src.cli",
-      "args": ["compute_distance"],
+      "args": ["compute-distance"],
       "console": "integratedTerminal",
       "justMyCode": true,
       "cwd": "${workspaceFolder}"
@@ -66,7 +66,7 @@
       "type": "python",
       "request": "launch",
       "module": "src.cli",
-      "args": ["find_unreachable"],
+      "args": ["find-unreachable"],
       "console": "integratedTerminal",
       "justMyCode": true,
       "cwd": "${workspaceFolder}"
@@ -98,7 +98,7 @@
       "args": [
         "--config",
         "${input:configFile}",
-        "run_all"
+        "run-all"
       ],
       "console": "integratedTerminal",
       "justMyCode": true,

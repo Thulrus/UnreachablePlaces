@@ -36,7 +36,7 @@
     {
       "label": "Pipeline: Run All (Complete)",
       "type": "shell",
-      "command": "./venv/bin/python -m src.cli run_all",
+      "command": "./venv/bin/python -m src.cli run-all",
       "problemMatcher": [],
       "presentation": {
         "echo": true,
@@ -58,7 +58,7 @@
     {
       "label": "Pipeline: Run All (Skip Fetch)",
       "type": "shell",
-      "command": "./venv/bin/python -m src.cli run_all --skip-fetch",
+      "command": "./venv/bin/python -m src.cli run-all --skip-fetch",
       "problemMatcher": [],
       "presentation": {
         "echo": true,
@@ -77,7 +77,7 @@
     {
       "label": "Step 1: Fetch Data",
       "type": "shell",
-      "command": "./venv/bin/python -m src.cli fetch_data",
+      "command": "./venv/bin/python -m src.cli fetch-data",
       "problemMatcher": [],
       "presentation": {
         "echo": true,
@@ -109,7 +109,7 @@
     {
       "label": "Step 3: Compute Distance Field",
       "type": "shell",
-      "command": "./venv/bin/python -m src.cli compute_distance",
+      "command": "./venv/bin/python -m src.cli compute-distance",
       "problemMatcher": [],
       "presentation": {
         "echo": true,
@@ -125,7 +125,7 @@
     {
       "label": "Step 4: Find Unreachable Point",
       "type": "shell",
-      "command": "./venv/bin/python -m src.cli find_unreachable",
+      "command": "./venv/bin/python -m src.cli find-unreachable",
       "problemMatcher": [],
       "presentation": {
         "echo": true,

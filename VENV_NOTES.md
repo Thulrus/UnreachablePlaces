@@ -25,7 +25,7 @@ source venv/bin/activate.fish
 
 # Then use 'python' command
 python -m src.cli info
-python -m src.cli run_all
+python -m src.cli run-all
 ```
 
 Benefits:
@@ -38,7 +38,7 @@ Benefits:
 ```bash
 # Use full path to venv python
 ./venv/bin/python -m src.cli info
-./venv/bin/python -m src.cli run_all
+./venv/bin/python -m src.cli run-all
 ```
 
 Benefits:
@@ -52,11 +52,11 @@ Benefits:
 
 ```bash
 # This will fail with ModuleNotFoundError
-python3 -m src.cli run_all  # ❌ Wrong
+python3 -m src.cli run-all  # ❌ Wrong
 
 # Use one of these instead
-python -m src.cli run_all           # ✅ (after activating venv)
-./venv/bin/python -m src.cli run_all  # ✅ (always works)
+python -m src.cli run-all           # ✅ (after activating venv)
+./venv/bin/python -m src.cli run-all  # ✅ (always works)
 ```
 
 ## Troubleshooting
