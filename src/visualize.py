@@ -170,9 +170,9 @@ class Visualizer:
                            distance_field: np.ndarray,
                            boundary: gpd.GeoDataFrame,
                            roads: gpd.GeoDataFrame,
-                          top_n_points: list,
-                          metadata: Dict,
-                          output_path: Optional[Path] = None) -> Path:
+                           top_n_points: list,
+                           metadata: Dict,
+                           output_path: Optional[Path] = None) -> Path:
         """
         Create a static map showing top N unreachable locations with labels.
         
@@ -417,12 +417,15 @@ class Visualizer:
 
         # Add top N unreachable points
         # Get top N points dynamically
-        top_n_key = [k for k in results.keys() if k.startswith('top_') and k.endswith('_unreachable')][0]
+        top_n_key = [
+            k for k in results.keys()
+            if k.startswith('top_') and k.endswith('_unreachable')
+        ][0]
         top_n_points = results[top_n_key]
         n = len(top_n_points)
-        
+
         topn_layer = folium.FeatureGroup(name=f'Top {n} Unreachable Points',
-                                          show=True)
+                                         show=True)
 
         for point in top_n_points:
             rank = point['rank']
@@ -449,17 +452,14 @@ class Visualizer:
                     f"Distance: {dist_km:.2f} km<br>"
                     f"Lat: {lat:.6f}<br>"
                     f"Lon: {lon:.6f}",
-                    max_width=300
-                ),
+                    max_width=300),
                 tooltip=f"#{rank}: {dist_km:.2f} km from road",
                 icon=folium.plugins.BeautifyIcon(
                     number=str(rank),
                     border_color=color,
                     background_color=color,
                     text_color=icon_color,
-                    inner_icon_style='margin-top:0;'
-                )
-            ).add_to(topn_layer)
+                    inner_icon_style='margin-top:0;')).add_to(topn_layer)
 
         topn_layer.add_to(m)
 
@@ -512,9 +512,12 @@ class Visualizer:
         boundary = processed_data['boundary']
         roads = processed_data['roads']
         unreachable_point = results['most_unreachable_point']
-        
+
         # Get top N points dynamically (could be top_5, top_10, etc.)
-        top_n_key = [k for k in results.keys() if k.startswith('top_') and k.endswith('_unreachable')][0]
+        top_n_key = [
+            k for k in results.keys()
+            if k.startswith('top_') and k.endswith('_unreachable')
+        ][0]
         top_n_points = results[top_n_key]
         n = len(top_n_points)
 

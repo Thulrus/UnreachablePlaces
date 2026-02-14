@@ -3,10 +3,11 @@ Analysis module for finding unreachable locations.
 
 This module extracts the most unreachable point(s) from the distance field.
 """
-import numpy as np
 import json
 from pathlib import Path
-from typing import Tuple, Dict, List
+from typing import Dict, List, Tuple
+
+import numpy as np
 from rasterio.transform import Affine
 
 from .config import get_config
@@ -14,7 +15,7 @@ from .config import get_config
 
 class UnreachabilityAnalyzer:
     """Analyzes distance fields to find unreachable locations."""
-    
+
     def __init__(self, config=None):
         """
         Initialize UnreachabilityAnalyzer.
@@ -23,8 +24,9 @@ class UnreachabilityAnalyzer:
             config: Configuration object. If None, uses default config.
         """
         self.config = config or get_config()
-        
-    def find_maximum(self, distance_field: np.ndarray) -> Tuple[int, int, float]:
+
+    def find_maximum(self,
+                     distance_field: np.ndarray) -> Tuple[int, int, float]:
         """
         Find the pixel with maximum distance.
         
@@ -35,23 +37,24 @@ class UnreachabilityAnalyzer:
             Tuple of (row, col, distance)
         """
         print("Finding maximum distance pixel...")
-        
+
         # Find maximum ignoring NaN
         max_distance = np.nanmax(distance_field)
-        
+
         # Find pixel coordinates of maximum
         max_indices = np.where(distance_field == max_distance)
-        
+
         # Take first occurrence if multiple maxima
         row = max_indices[0][0]
         col = max_indices[1][0]
-        
+
         print(f"  Found at pixel ({row}, {col})")
         print(f"  Distance: {max_distance:.2f} m ({max_distance/1000:.2f} km)")
-        
+
         return row, col, max_distance
-    
-    def pixel_to_coords(self, row: int, col: int, transform: Affine) -> Tuple[float, float]:
+
+    def pixel_to_coords(self, row: int, col: int,
+                        transform: Affine) -> Tuple[float, float]:
         """
         Convert pixel coordinates to geographic coordinates.
         
@@ -65,13 +68,15 @@ class UnreachabilityAnalyzer:
         """
         # Get center of pixel
         x, y = transform * (col + 0.5, row + 0.5)
-        
+
         return x, y
-    
-    def find_top_n_unreachable(self, distance_field: np.ndarray, 
-                              n: int = 5,
-                              min_separation_km: float = 25.0,
-                              resolution_m: float = 250.0) -> List[Tuple[int, int, float]]:
+
+    def find_top_n_unreachable(
+            self,
+            distance_field: np.ndarray,
+            n: int = 5,
+            min_separation_km: float = 25.0,
+            resolution_m: float = 250.0) -> List[Tuple[int, int, float]]:
         """
         Find the top N most unreachable pixels with minimum separation.
         
@@ -89,48 +94,54 @@ class UnreachabilityAnalyzer:
         """
         print(f"Finding top {n} most unreachable pixels...")
         print(f"  Minimum separation: {min_separation_km} km")
-        
+
         # Convert min separation to pixels
         min_separation_pixels = int((min_separation_km * 1000) / resolution_m)
-        print(f"  ({min_separation_pixels} pixels at {resolution_m}m resolution)")
-        
+        print(
+            f"  ({min_separation_pixels} pixels at {resolution_m}m resolution)"
+        )
+
         # Create a working copy of the distance field
         working_field = distance_field.copy()
-        
+
         # Create coordinate grids for distance calculation
         rows, cols = np.meshgrid(np.arange(working_field.shape[0]),
                                  np.arange(working_field.shape[1]),
                                  indexing='ij')
-        
+
         results = []
-        
+
         for i in range(n):
             # Find current maximum
             max_distance = np.nanmax(working_field)
-            
+
             # Check if we have valid data left
             if np.isnan(max_distance) or max_distance <= 0:
-                print(f"  Warning: Only found {i} valid locations (requested {n})")
+                print(
+                    f"  Warning: Only found {i} valid locations (requested {n})"
+                )
                 break
-            
+
             # Find pixel coordinates of maximum
             max_indices = np.where(working_field == max_distance)
             row = max_indices[0][0]
             col = max_indices[1][0]
-            
+
             results.append((int(row), int(col), float(max_distance)))
-            print(f"  #{i+1}: {max_distance/1000:.2f} km at pixel ({row}, {col})")
-            
+            print(
+                f"  #{i+1}: {max_distance/1000:.2f} km at pixel ({row}, {col})"
+            )
+
             # Mask out area within min_separation_pixels
             # Calculate distance from this point to all pixels
             distances = np.sqrt((rows - row)**2 + (cols - col)**2)
-            
+
             # Set all pixels within separation radius to NaN
             mask = distances < min_separation_pixels
             working_field[mask] = np.nan
-        
+
         return results
-    
+
     def analyze_all(self, distance_data: dict, processed_data: dict) -> Dict:
         """
         Run full analysis pipeline.
@@ -145,58 +156,56 @@ class UnreachabilityAnalyzer:
         print("=" * 60)
         print("ANALYZING UNREACHABILITY")
         print("=" * 60)
-        
+
         distance_field = distance_data['distance_field']
         metadata = distance_data['metadata']
         transform = metadata['transform']
         crs = metadata['crs']
         boundary = processed_data['boundary']
-        
+
         # Find maximum unreachable point
         print("\n1. Finding most unreachable point...")
         row, col, max_distance = self.find_maximum(distance_field)
-        
+
         # Convert to geographic coordinates
         print("\n2. Converting to geographic coordinates...")
         x, y = self.pixel_to_coords(row, col, transform)
-        
+
         print(f"  Projected coords ({crs}): ({x:.2f}, {y:.2f})")
-        
+
         # Convert to lat/lon for readability
         import geopandas as gpd
         from shapely.geometry import Point
-        
-        point_gdf = gpd.GeoDataFrame(
-            geometry=[Point(x, y)],
-            crs=crs
-        )
+
+        point_gdf = gpd.GeoDataFrame(geometry=[Point(x, y)], crs=crs)
         point_wgs84 = point_gdf.to_crs('EPSG:4326')
-        lon, lat = point_wgs84.geometry.iloc[0].x, point_wgs84.geometry.iloc[0].y
-        
+        lon, lat = point_wgs84.geometry.iloc[0].x, point_wgs84.geometry.iloc[
+            0].y
+
         print(f"  Lat/Lon (EPSG:4326): ({lat:.6f}, {lon:.6f})")
-        
+
         # Get top N settings from config
         top_n = self.config.get('analysis.top_n', 5)
         min_separation_km = self.config.get('analysis.min_separation_km', 25.0)
         resolution_m = self.config.resolution
-        
+
         # Find top N unreachable points with spatial separation
         print(f"\n3. Finding top {top_n} most unreachable points...")
         top_n_points = self.find_top_n_unreachable(
-            distance_field, 
+            distance_field,
             n=top_n,
             min_separation_km=min_separation_km,
-            resolution_m=resolution_m
-        )
-        
+            resolution_m=resolution_m)
+
         # Convert all to geographic coordinates
         top_n_geo = []
         for i, (r, c, dist) in enumerate(top_n_points, 1):
             x_i, y_i = self.pixel_to_coords(r, c, transform)
             point_gdf_i = gpd.GeoDataFrame(geometry=[Point(x_i, y_i)], crs=crs)
             point_wgs84_i = point_gdf_i.to_crs('EPSG:4326')
-            lon_i, lat_i = point_wgs84_i.geometry.iloc[0].x, point_wgs84_i.geometry.iloc[0].y
-            
+            lon_i, lat_i = point_wgs84_i.geometry.iloc[
+                0].x, point_wgs84_i.geometry.iloc[0].y
+
             top_n_geo.append({
                 'rank': i,
                 'distance_m': float(dist),
@@ -208,13 +217,13 @@ class UnreachabilityAnalyzer:
                 'latitude': float(lat_i),
                 'longitude': float(lon_i)
             })
-            
+
             print(f"  #{i}: {dist/1000:.2f} km at ({lat_i:.6f}, {lon_i:.6f})")
-        
+
         # Calculate statistics
         print("\n4. Computing statistics...")
         valid_distances = distance_field[~np.isnan(distance_field)]
-        
+
         stats = {
             'max_distance_m': float(np.max(valid_distances)),
             'max_distance_km': float(np.max(valid_distances) / 1000),
@@ -226,11 +235,11 @@ class UnreachabilityAnalyzer:
             'total_pixels': int(distance_field.size),
             'valid_pixels': int(len(valid_distances))
         }
-        
+
         print(f"  Max: {stats['max_distance_km']:.2f} km")
         print(f"  Mean: {stats['mean_distance_km']:.2f} km")
         print(f"  Median: {stats['median_distance_km']:.2f} km")
-        
+
         # Compile results
         results = {
             'state': self.config.state_name,
@@ -253,52 +262,55 @@ class UnreachabilityAnalyzer:
             f'top_{top_n}_unreachable': top_n_geo,
             'statistics': stats
         }
-        
+
         # Save results
         print("\n5. Saving results...")
-        results_file = self.config.get('output.results_file', 'outputs/results.json')
+        results_file = self.config.get('output.results_file',
+                                       'outputs/results.json')
         results_path = Path(results_file)
         results_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         with open(results_path, 'w') as f:
             json.dump(results, f, indent=2)
-        
+
         print(f"  Saved to {results_path}")
-        
+
         print("=" * 60)
         print("ANALYSIS COMPLETE")
         print("=" * 60)
-        
+
         return results
 
 
 def main():
     """Main function for testing analysis."""
+    from .distance import DistanceCalculator
     from .fetch import DataFetcher
     from .preprocess import DataPreprocessor
-    from .distance import DistanceCalculator
-    
+
     # Run full pipeline
     fetcher = DataFetcher()
     data = fetcher.fetch_all()
-    
+
     preprocessor = DataPreprocessor()
     processed = preprocessor.preprocess_all(data)
-    
+
     calculator = DistanceCalculator()
     distance_data = calculator.compute_all(processed)
-    
+
     # Analyze
     analyzer = UnreachabilityAnalyzer()
     results = analyzer.analyze_all(distance_data, processed)
-    
+
     print("\n" + "=" * 60)
     print("FINAL RESULT")
     print("=" * 60)
     print(f"Most unreachable point in {results['state']}:")
     print(f"  Location: {results['most_unreachable_point']['latitude']:.6f}, "
           f"{results['most_unreachable_point']['longitude']:.6f}")
-    print(f"  Distance from road: {results['most_unreachable_point']['distance_km']:.2f} km")
+    print(
+        f"  Distance from road: {results['most_unreachable_point']['distance_km']:.2f} km"
+    )
 
 
 if __name__ == '__main__':
