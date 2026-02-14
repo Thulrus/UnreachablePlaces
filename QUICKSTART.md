@@ -18,14 +18,14 @@ pip install -r requirements.txt
 
 ```bash
 # Option 1: Run everything at once
-python -m src.cli run_all
+./venv/bin/python -m src.cli run_all
 
 # Option 2: Run step by step
-python -m src.cli fetch_data          # Downloads data (10-20 min first time)
-python -m src.cli preprocess          # Processes data (2-3 min)
-python -m src.cli compute_distance    # Computes distances (30 sec)
-python -m src.cli find_unreachable    # Finds most remote point (5 sec)
-python -m src.cli visualize           # Creates maps (1 min)
+./venv/bin/python -m src.cli fetch_data          # Downloads data (10-20 min first time)
+./venv/bin/python -m src.cli preprocess          # Processes data (2-3 min)
+./venv/bin/python -m src.cli compute_distance    # Computes distances (30 sec)
+./venv/bin/python -m src.cli find_unreachable    # Finds most remote point (5 sec)
+./venv/bin/python -m src.cli visualize           # Creates maps (1 min)
 ```
 
 ## View Results
@@ -45,17 +45,17 @@ xdg-open outputs/maps/utah_unreachability_interactive.html
 
 ```bash
 # Show project info
-python -m src.cli info
+./venv/bin/python -m src.cli info
 
 # Run with custom config
-python -m src.cli --config my_config.yaml run_all
+./venv/bin/python -m src.cli --config my_config.yaml run_all
 
 # Skip data download if already fetched
-python -m src.cli run_all --skip-fetch
+./venv/bin/python -m src.cli run_all --skip-fetch
 
 # Get help
-python -m src.cli --help
-python -m src.cli run_all --help
+./venv/bin/python -m src.cli --help
+./venv/bin/python -m src.cli run_all --help
 ```
 
 ## Analyze Another State
@@ -68,7 +68,7 @@ python -m src.cli run_all --help
 #     fips_code: "08"
 
 # 2. Run pipeline
-python -m src.cli run_all
+./venv/bin/python -m src.cli run_all
 ```
 
 ## Project Structure

@@ -57,10 +57,10 @@ pip install -r requirements.txt
 
 ```bash
 # Quick test with info command
-python3 -m src.cli info
+python -m src.cli info
 
 # Run full pipeline (will take 15-25 minutes first time)
-python3 -m src.cli run_all
+python -m src.cli run_all
 ```
 
 ### 3. View Results
@@ -140,17 +140,17 @@ After running the pipeline:
 ### Basic Usage
 ```bash
 # Show help
-python3 -m src.cli --help
+python -m src.cli --help
 
 # Run complete pipeline
-python3 -m src.cli run_all
+python -m src.cli run_all
 
 # Run individual steps
-python3 -m src.cli fetch_data
-python3 -m src.cli preprocess
-python3 -m src.cli compute_distance
-python3 -m src.cli find_unreachable
-python3 -m src.cli visualize
+python -m src.cli fetch_data
+python -m src.cli preprocess
+python -m src.cli compute_distance
+python -m src.cli find_unreachable
+python -m src.cli visualize
 ```
 
 ### Custom Configuration
@@ -160,7 +160,7 @@ cp config.yaml config_colorado.yaml
 # Edit config_colorado.yaml to set state to Colorado
 
 # Run with custom config
-python3 -m src.cli --config config_colorado.yaml run_all
+python -m src.cli --config config_colorado.yaml run_all
 ```
 
 ### Python API
