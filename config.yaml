@@ -44,9 +44,18 @@ output:
   # Output formats
   static_map: true
   interactive_map: true
+  labeled_map: true
   
   # Results file
   results_file: "outputs/results.json"
+
+analysis:
+  # Number of top locations to find
+  top_n: 5
+  
+  # Minimum separation distance between top locations (km)
+  # This prevents all top N from being clustered in the same area
+  min_separation_km: 25
   
 visualization:
   # Colormap for distance heatmap

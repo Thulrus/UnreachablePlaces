@@ -167,32 +167,33 @@ class Visualizer:
         return output_path
 
     def create_labeled_map(self,
-                          distance_field: np.ndarray,
-                          boundary: gpd.GeoDataFrame,
-                          roads: gpd.GeoDataFrame,
-                          top_10_points: list,
+                           distance_field: np.ndarray,
+                           boundary: gpd.GeoDataFrame,
+                           roads: gpd.GeoDataFrame,
+                          top_n_points: list,
                           metadata: Dict,
                           output_path: Optional[Path] = None) -> Path:
         """
-        Create a static map showing top 10 unreachable locations with labels.
+        Create a static map showing top N unreachable locations with labels.
         
         Args:
             distance_field: Distance field array
             boundary: Boundary GeoDataFrame
             roads: Roads GeoDataFrame
-            top_10_points: List of top 10 unreachable point dictionaries
+            top_n_points: List of top N unreachable point dictionaries
             metadata: Raster metadata
             output_path: Path to save figure. If None, uses default.
             
         Returns:
             Path to saved figure
         """
-        print("Creating labeled map with top 10 locations...")
+        n = len(top_n_points)
+        print(f"Creating labeled map with top {n} locations...")
 
         if output_path is None:
             state_name = self.config.state_name.lower()
             output_path = self.config.get_path(
-                'maps') / f"{state_name}_top10_labeled_map.png"
+                'maps') / f"{state_name}_top{n}_labeled_map.png"
 
         # Create figure
         figsize = self.config.get('visualization.figsize', [12, 10])
@@ -233,66 +234,66 @@ class Visualizer:
         else:
             roads_sample = roads
 
-        roads_sample.plot(ax=ax,
-                          color='gray',
-                          linewidth=0.2,
-                          alpha=0.2)
+        roads_sample.plot(ax=ax, color='gray', linewidth=0.2, alpha=0.2)
 
-        # Plot top 10 points with numbered labels
-        colors = plt.cm.rainbow(np.linspace(0, 1, 10))
-        
-        for point in top_10_points:
+        # Plot top N points with numbered labels
+        colors = plt.cm.rainbow(np.linspace(0, 1, n))
+
+        for point in top_n_points:
             rank = point['rank']
             point_x = point['x_projected']
             point_y = point['y_projected']
             dist_km = point['distance_km']
-            
+
             # Plot marker
-            ax.plot(point_x, point_y,
-                   'o',
-                   color=colors[rank-1],
-                   markersize=14,
-                   markeredgecolor='white',
-                   markeredgewidth=2,
-                   zorder=5)
-            
+            ax.plot(point_x,
+                    point_y,
+                    'o',
+                    color=colors[rank - 1],
+                    markersize=14,
+                    markeredgecolor='white',
+                    markeredgewidth=2,
+                    zorder=5)
+
             # Add number label on marker
-            ax.text(point_x, point_y,
-                   str(rank),
-                   ha='center', va='center',
-                   color='white',
-                   fontsize=9,
-                   fontweight='bold',
-                   zorder=6)
-            
+            ax.text(point_x,
+                    point_y,
+                    str(rank),
+                    ha='center',
+                    va='center',
+                    color='white',
+                    fontsize=9,
+                    fontweight='bold',
+                    zorder=6)
+
             # Add annotation with distance
             offset_x = 20 if rank % 2 == 0 else -20
             offset_y = 20 if rank <= 5 else -20
             ha = 'left' if rank % 2 == 0 else 'right'
-            
+
             ax.annotate(f"#{rank}: {dist_km:.1f} km",
-                       xy=(point_x, point_y),
-                       xytext=(offset_x, offset_y),
-                       textcoords='offset points',
-                       bbox=dict(boxstyle='round,pad=0.4',
-                                facecolor='white',
-                                edgecolor=colors[rank-1],
-                                linewidth=2,
-                                alpha=0.9),
-                       arrowprops=dict(arrowstyle='->',
-                                     connectionstyle='arc3,rad=0.2',
-                                     color=colors[rank-1],
-                                     linewidth=1.5),
-                       fontsize=8,
-                       fontweight='bold',
-                       ha=ha)
+                        xy=(point_x, point_y),
+                        xytext=(offset_x, offset_y),
+                        textcoords='offset points',
+                        bbox=dict(boxstyle='round,pad=0.4',
+                                  facecolor='white',
+                                  edgecolor=colors[rank - 1],
+                                  linewidth=2,
+                                  alpha=0.9),
+                        arrowprops=dict(arrowstyle='->',
+                                        connectionstyle='arc3,rad=0.2',
+                                        color=colors[rank - 1],
+                                        linewidth=1.5),
+                        fontsize=8,
+                        fontweight='bold',
+                        ha=ha)
 
         # Set labels and title
         ax.set_xlabel('Easting (m)', fontsize=12)
         ax.set_ylabel('Northing (m)', fontsize=12)
         ax.set_title(
-            f'Top 10 Most Unreachable Locations in {self.config.state_name}\n'
-            f'Ranked by Euclidean Distance from Roads',
+            f'Top {n} Most Unreachable Locations in {self.config.state_name}\n'
+            f'Ranked by Euclidean Distance from Roads (Min {self.config.get("analysis.min_separation_km", 25)}km separation)',
             fontsize=14,
             fontweight='bold',
             pad=20)
@@ -300,18 +301,21 @@ class Visualizer:
         # Add grid
         ax.grid(True, alpha=0.3, linestyle='--', linewidth=0.5)
 
-        # Create custom legend for top 10
-        legend_elements = [mpatches.Patch(facecolor=colors[i], 
-                                         edgecolor='white',
-                                         label=f"#{i+1}: {top_10_points[i]['distance_km']:.1f} km")
-                          for i in range(10)]
-        
+        # Create custom legend for top N
+        legend_elements = [
+            mpatches.Patch(
+                facecolor=colors[i],
+                edgecolor='white',
+                label=f"#{i+1}: {top_n_points[i]['distance_km']:.1f} km")
+            for i in range(n)
+        ]
+
         ax.legend(handles=legend_elements,
-                 loc='upper left',
-                 fontsize=8,
-                 framealpha=0.95,
-                 title='Top 10 Locations',
-                 title_fontsize=9)
+                  loc='upper left',
+                  fontsize=8,
+                  framealpha=0.95,
+                  title=f'Top {n} Locations',
+                  title_fontsize=9)
 
         # Tight layout
         plt.tight_layout()
@@ -411,11 +415,16 @@ class Visualizer:
 
         unreachable_layer.add_to(m)
 
-        # Add top 10 unreachable points
-        top10_layer = folium.FeatureGroup(name='Top 10 Unreachable Points',
+        # Add top N unreachable points
+        # Get top N points dynamically
+        top_n_key = [k for k in results.keys() if k.startswith('top_') and k.endswith('_unreachable')][0]
+        top_n_points = results[top_n_key]
+        n = len(top_n_points)
+        
+        topn_layer = folium.FeatureGroup(name=f'Top {n} Unreachable Points',
                                           show=False)
 
-        for point in results['top_10_unreachable']:
+        for point in top_n_points:
             rank = point['rank']
             lat = point['latitude']
             lon = point['longitude']
@@ -425,15 +434,15 @@ class Visualizer:
 
             folium.CircleMarker(
                 location=[lat, lon],
-                radius=10 - rank * 0.5,
+                radius=10 - rank * 0.5 if rank <= 10 else 5,
                 popup=f"<b>Rank #{rank}</b><br>Distance: {dist_km:.2f} km",
                 tooltip=f"#{rank}: {dist_km:.2f} km",
                 color=color,
                 fill=True,
                 fillColor=color,
-                fillOpacity=0.7).add_to(top10_layer)
+                fillOpacity=0.7).add_to(topn_layer)
 
-        top10_layer.add_to(m)
+        topn_layer.add_to(m)
 
         # Add layer control
         folium.LayerControl().add_to(m)
@@ -484,7 +493,11 @@ class Visualizer:
         boundary = processed_data['boundary']
         roads = processed_data['roads']
         unreachable_point = results['most_unreachable_point']
-        top_10_points = results['top_10_unreachable']
+        
+        # Get top N points dynamically (could be top_5, top_10, etc.)
+        top_n_key = [k for k in results.keys() if k.startswith('top_') and k.endswith('_unreachable')][0]
+        top_n_points = results[top_n_key]
+        n = len(top_n_points)
 
         outputs = {}
 
@@ -496,11 +509,11 @@ class Visualizer:
                                                  metadata)
             outputs['static_map'] = static_path
 
-        # Labeled map with top 10
+        # Labeled map with top N
         if self.config.get('output.labeled_map', True):
-            print("\n2. Creating labeled map with top 10 locations...")
+            print(f"\n2. Creating labeled map with top {n} locations...")
             labeled_path = self.create_labeled_map(distance_field, boundary,
-                                                   roads, top_10_points,
+                                                   roads, top_n_points,
                                                    metadata)
             outputs['labeled_map'] = labeled_path
 

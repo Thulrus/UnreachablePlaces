@@ -69,35 +69,65 @@ class UnreachabilityAnalyzer:
         return x, y
     
     def find_top_n_unreachable(self, distance_field: np.ndarray, 
-                              n: int = 10) -> List[Tuple[int, int, float]]:
+                              n: int = 5,
+                              min_separation_km: float = 25.0,
+                              resolution_m: float = 250.0) -> List[Tuple[int, int, float]]:
         """
-        Find the top N most unreachable pixels.
+        Find the top N most unreachable pixels with minimum separation.
+        
+        This ensures the top N locations are spatially distributed rather than
+        all clustered around a single remote area.
         
         Args:
             distance_field: Distance field array
             n: Number of top locations to find
+            min_separation_km: Minimum separation between locations (km)
+            resolution_m: Pixel resolution in meters
             
         Returns:
-            List of (row, col, distance) tuples
+            List of (row, col, distance) tuples, spatially separated
         """
         print(f"Finding top {n} most unreachable pixels...")
+        print(f"  Minimum separation: {min_separation_km} km")
         
-        # Flatten and remove NaN
-        flat_field = distance_field.flatten()
-        valid_mask = ~np.isnan(flat_field)
-        valid_values = flat_field[valid_mask]
-        valid_indices = np.where(valid_mask)[0]
+        # Convert min separation to pixels
+        min_separation_pixels = int((min_separation_km * 1000) / resolution_m)
+        print(f"  ({min_separation_pixels} pixels at {resolution_m}m resolution)")
         
-        # Get top N indices
-        top_n_indices = np.argsort(valid_values)[-n:][::-1]
+        # Create a working copy of the distance field
+        working_field = distance_field.copy()
         
-        # Convert back to 2D coordinates
+        # Create coordinate grids for distance calculation
+        rows, cols = np.meshgrid(np.arange(working_field.shape[0]),
+                                 np.arange(working_field.shape[1]),
+                                 indexing='ij')
+        
         results = []
-        for idx in top_n_indices:
-            flat_idx = valid_indices[idx]
-            row, col = np.unravel_index(flat_idx, distance_field.shape)
-            distance = distance_field[row, col]
-            results.append((int(row), int(col), float(distance)))
+        
+        for i in range(n):
+            # Find current maximum
+            max_distance = np.nanmax(working_field)
+            
+            # Check if we have valid data left
+            if np.isnan(max_distance) or max_distance <= 0:
+                print(f"  Warning: Only found {i} valid locations (requested {n})")
+                break
+            
+            # Find pixel coordinates of maximum
+            max_indices = np.where(working_field == max_distance)
+            row = max_indices[0][0]
+            col = max_indices[1][0]
+            
+            results.append((int(row), int(col), float(max_distance)))
+            print(f"  #{i+1}: {max_distance/1000:.2f} km at pixel ({row}, {col})")
+            
+            # Mask out area within min_separation_pixels
+            # Calculate distance from this point to all pixels
+            distances = np.sqrt((rows - row)**2 + (cols - col)**2)
+            
+            # Set all pixels within separation radius to NaN
+            mask = distances < min_separation_pixels
+            working_field[mask] = np.nan
         
         return results
     
@@ -145,19 +175,29 @@ class UnreachabilityAnalyzer:
         
         print(f"  Lat/Lon (EPSG:4326): ({lat:.6f}, {lon:.6f})")
         
-        # Find top 10 unreachable points
-        print("\n3. Finding top 10 most unreachable points...")
-        top_10 = self.find_top_n_unreachable(distance_field, n=10)
+        # Get top N settings from config
+        top_n = self.config.get('analysis.top_n', 5)
+        min_separation_km = self.config.get('analysis.min_separation_km', 25.0)
+        resolution_m = self.config.resolution
+        
+        # Find top N unreachable points with spatial separation
+        print(f"\n3. Finding top {top_n} most unreachable points...")
+        top_n_points = self.find_top_n_unreachable(
+            distance_field, 
+            n=top_n,
+            min_separation_km=min_separation_km,
+            resolution_m=resolution_m
+        )
         
         # Convert all to geographic coordinates
-        top_10_geo = []
-        for i, (r, c, dist) in enumerate(top_10, 1):
+        top_n_geo = []
+        for i, (r, c, dist) in enumerate(top_n_points, 1):
             x_i, y_i = self.pixel_to_coords(r, c, transform)
             point_gdf_i = gpd.GeoDataFrame(geometry=[Point(x_i, y_i)], crs=crs)
             point_wgs84_i = point_gdf_i.to_crs('EPSG:4326')
             lon_i, lat_i = point_wgs84_i.geometry.iloc[0].x, point_wgs84_i.geometry.iloc[0].y
             
-            top_10_geo.append({
+            top_n_geo.append({
                 'rank': i,
                 'distance_m': float(dist),
                 'distance_km': float(dist / 1000),
@@ -196,6 +236,10 @@ class UnreachabilityAnalyzer:
             'state': self.config.state_name,
             'crs': str(crs),
             'resolution_m': self.config.resolution,
+            'analysis_settings': {
+                'top_n': top_n,
+                'min_separation_km': min_separation_km
+            },
             'most_unreachable_point': {
                 'distance_m': float(max_distance),
                 'distance_km': float(max_distance / 1000),
@@ -206,7 +250,7 @@ class UnreachabilityAnalyzer:
                 'latitude': float(lat),
                 'longitude': float(lon)
             },
-            'top_10_unreachable': top_10_geo,
+            f'top_{top_n}_unreachable': top_n_geo,
             'statistics': stats
         }
         
