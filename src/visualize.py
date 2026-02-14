@@ -189,9 +189,17 @@ class Visualizer:
             control_scale=True
         )
         
-        # Add different tile layers
-        folium.TileLayer('Stamen Terrain', name='Terrain').add_to(m)
-        folium.TileLayer('Stamen Toner', name='Toner').add_to(m)
+        # Add different tile layers with proper attribution
+        folium.TileLayer(
+            tiles='https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}.jpg',
+            attr='Map tiles by Stadia Maps, under CC BY 3.0. Data by OpenStreetMap, under ODbL',
+            name='Terrain'
+        ).add_to(m)
+        folium.TileLayer(
+            tiles='https://tiles.stadiamaps.com/tiles/stamen_toner/{z}/{x}/{y}.png',
+            attr='Map tiles by Stadia Maps, under CC BY 3.0. Data by OpenStreetMap, under ODbL',
+            name='Toner'
+        ).add_to(m)
         folium.TileLayer('CartoDB positron', name='Light').add_to(m)
         
         # Add boundary
