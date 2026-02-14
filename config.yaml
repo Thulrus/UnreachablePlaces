@@ -1,4 +1,8 @@
-# Default configuration for Utah
+# State configuration
+# To change states: update name and fips_code, then run: run-all (or fetch-data, preprocess, compute-distance, find-unreachable, visualize)
+# 
+# Common FIPS codes: AK=02, AZ=04, CA=06, CO=08, FL=12, MT=30, NV=32, NM=35, TX=48, UT=49, WY=56
+# Full list: see SWITCH_STATES.md
 state:
   name: "Utah"
   fips_code: "49"  # Utah FIPS code
@@ -61,7 +65,7 @@ cost_distance:
   # Enable terrain-aware cost-distance analysis
   # When false (default), uses simple Euclidean distance
   # When true, incorporates slope and land cover factors
-  enabled: true
+  enabled: false
   
   # Resolution for cost surface calculations (meters)
   # Should match raster.resolution for consistency
