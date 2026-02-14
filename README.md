@@ -158,6 +158,8 @@ visualization:
 
 ## 📝 CLI Commands
 
+> **Note:** Command names use hyphens (e.g., `run-all`, `fetch-data`) due to Click framework conventions. See [CLI_COMMANDS.md](CLI_COMMANDS.md) for details.
+
 ```bash
 # Show project info
 python -m src.cli info
