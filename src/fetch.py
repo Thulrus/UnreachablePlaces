@@ -258,12 +258,13 @@ class DataFetcher:
             try:
                 results = response.json()
             except ValueError as e:
-                print(f"API returned invalid JSON. Response text: {response.text[:200]}")
+                print(
+                    f"API returned invalid JSON. Response text: {response.text[:200]}"
+                )
                 raise ValueError(
                     f"National Map API returned invalid response. "
                     f"The API may be down or have changed. "
-                    f"Please download DEM data manually."
-                ) from e
+                    f"Please download DEM data manually.") from e
 
             items = results.get('items', [])
 
@@ -274,12 +275,13 @@ class DataFetcher:
                     'datasets'] = 'National Elevation Dataset (NED) 1 arc-second'
                 response = requests.get(base_url, params=params, timeout=30)
                 response.raise_for_status()
-                
+
                 try:
                     results = response.json()
                 except ValueError:
-                    raise ValueError("API returned invalid JSON for both datasets")
-                
+                    raise ValueError(
+                        "API returned invalid JSON for both datasets")
+
                 items = results.get('items', [])
 
                 if not items:

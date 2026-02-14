@@ -239,7 +239,11 @@ def find_unreachable(ctx):
         import geopandas as gpd
         import rasterio
 
-        distance_file = processed_path / f"{state_name}_distance.tif"
+        # Check which distance mode was used
+        if config.get('cost_distance.enabled', False):
+            distance_file = processed_path / f"{state_name}_distance_cost.tif"
+        else:
+            distance_file = processed_path / f"{state_name}_distance.tif"
         boundary_file = processed_path / f"{state_name}_boundary_projected.geojson"
 
         if not distance_file.exists():
@@ -307,7 +311,11 @@ def visualize(ctx):
         import geopandas as gpd
         import rasterio
 
-        distance_file = processed_path / f"{state_name}_distance.tif"
+        # Check which distance mode was used
+        if config.get('cost_distance.enabled', False):
+            distance_file = processed_path / f"{state_name}_distance_cost.tif"
+        else:
+            distance_file = processed_path / f"{state_name}_distance.tif"
         boundary_file = processed_path / f"{state_name}_boundary_projected.geojson"
         roads_file = processed_path / f"{state_name}_roads_clipped.geojson"
         results_file = config.get('output.results_file',

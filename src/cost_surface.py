@@ -127,8 +127,8 @@ class CostSurfaceGenerator:
             self.config = yaml.safe_load(f)
 
         self.project_dir = Path(__file__).parent.parent
-        self.processed_dir = self.project_dir / self.config['paths'][
-            'processed_data']
+        self.raw_dir = self.project_dir / self.config['paths']['raw_data']
+        self.processed_dir = self.project_dir / self.config['paths']['processed_data']
 
         # Get cost distance configuration
         self.cost_config = self.config.get('cost_distance', {})
@@ -302,9 +302,10 @@ class CostSurfaceGenerator:
         """
         state_lower = state_name.lower()
 
-        # Define paths
-        dem_path = self.processed_dir / f"{state_lower}_dem.tif"
-        landcover_path = self.processed_dir / f"{state_lower}_landcover.tif"
+        # Define paths - read from raw, write to processed
+        dem_path = self.raw_dir / f"{state_lower}_dem.tif"
+        landcover_path = self.raw_dir / f"{state_lower}_landcover.tif"
+        road_mask_path = self.processed_dir / f"{state_lower}_road_mask.tif"
         slope_path = self.processed_dir / f"{state_lower}_slope.tif"
         cost_path = self.processed_dir / f"{state_lower}_cost_surface.tif"
 
@@ -313,6 +314,13 @@ class CostSurfaceGenerator:
             raise FileNotFoundError(f"DEM not found: {dem_path}")
         if not landcover_path.exists():
             raise FileNotFoundError(f"Land cover not found: {landcover_path}")
+        
+        # Check if road mask exists (needed for resampling target)
+        if not road_mask_path.exists():
+            raise FileNotFoundError(
+                f"Road mask not found: {road_mask_path}. "
+                "Please run preprocessing first."
+            )
 
         # Generate outputs
         logger.info(f"Processing cost surface for {state_name}")
@@ -320,10 +328,68 @@ class CostSurfaceGenerator:
         # Calculate and save slope
         self.calculate_slope(str(dem_path), str(slope_path))
 
-        # Generate cost surface
-        cost_surface, profile = self.generate_cost_surface(
-            str(dem_path), str(landcover_path), str(cost_path))
-
+        # Generate cost surface at DEM resolution
+        print("Generating cost surface at DEM resolution...")
+        cost_surface_highres, profile = self.generate_cost_surface(
+            str(dem_path), str(landcover_path), None
+        )
+        
+        # Resample cost surface to match road mask resolution
+        print(f"Resampling cost surface to match road mask ({self.resolution}m)...")
+        with rasterio.open(road_mask_path) as template:
+            target_shape = (template.height, template.width)
+            target_transform = template.transform
+            target_crs = template.crs
+        
+        # Create temporary file for high-res cost surface
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix='.tif', delete=False) as tmp:
+            tmp_path = tmp.name
+        
+        try:
+            # Save high-res cost surface temporarily
+            profile.update(
+                dtype=rasterio.float32,
+                count=1,
+                nodata=-9999
+            )
+            with rasterio.open(tmp_path, 'w', **profile) as dst:
+                dst.write(cost_surface_highres.astype(np.float32), 1)
+            
+            # Resample to target resolution
+            cost_surface_resampled = np.zeros(target_shape, dtype=np.float32)
+            
+            reproject(
+                source=rasterio.band(rasterio.open(tmp_path), 1),
+                destination=cost_surface_resampled,
+                src_transform=profile['transform'],
+                src_crs=profile['crs'],
+                dst_transform=target_transform,
+                dst_crs=target_crs,
+                resampling=Resampling.bilinear  # Bilinear for continuous cost data
+            )
+        finally:
+            # Clean up temp file
+            Path(tmp_path).unlink(missing_ok=True)
+        
+        # Save resampled cost surface
+        print(f"Saving resampled cost surface: {target_shape}")
+        target_profile = {
+            'driver': 'GTiff',
+            'dtype': rasterio.float32,
+            'height': target_shape[0],
+            'width': target_shape[1],
+            'count': 1,
+            'crs': target_crs,
+            'transform': target_transform,
+            'compress': 'lzw',
+            'nodata': -9999
+        }
+        
+        with rasterio.open(cost_path, 'w', **target_profile) as dst:
+            dst.write(cost_surface_resampled.astype(np.float32), 1)
+        
+        print(f"✓ Cost surface saved to: {cost_path}")
         logger.info(f"Cost surface generation complete: {cost_path}")
         return str(cost_path)
 
