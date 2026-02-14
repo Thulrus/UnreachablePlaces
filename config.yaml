@@ -4,8 +4,8 @@
 # Common FIPS codes: AK=02, AZ=04, CA=06, CO=08, FL=12, MT=30, NV=32, NM=35, TX=48, UT=49, WY=56
 # Full list: see SWITCH_STATES.md
 state:
-  name: "Utah"
-  fips_code: "49"  # Utah FIPS code
+  name: "Pennsylvania"
+  fips_code: "42"  # Pennsylvania FIPS code
 
 projection:
   # EPSG:5070 - NAD83 / Conus Albers (distance-preserving for CONUS)

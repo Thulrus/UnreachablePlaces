@@ -122,6 +122,8 @@ class DataPreprocessor:
         """
         Rasterize road vectors to a binary mask.
         
+        Uses chunked processing to handle large road networks without exhausting memory.
+        
         Args:
             roads: GeoDataFrame with roads
             raster_shape: Shape of output raster (height, width)
@@ -132,18 +134,39 @@ class DataPreprocessor:
         """
         print(f"Rasterizing {len(roads)} road segments...")
         
-        # Create shapes for rasterization (geometry, value pairs)
-        shapes = [(geom, 1) for geom in roads.geometry]
+        # Create output array
+        road_mask = np.zeros(raster_shape, dtype=np.uint8)
         
-        # Rasterize
-        road_mask = rasterize(
-            shapes=shapes,
-            out_shape=raster_shape,
-            transform=transform,
-            fill=0,
-            dtype=np.uint8,
-            all_touched=True  # Include pixels touched by roads
-        )
+        # Process in chunks to avoid memory issues with large datasets
+        chunk_size = 50000  # Process 50k roads at a time
+        n_chunks = int(np.ceil(len(roads) / chunk_size))
+        
+        if n_chunks > 1:
+            print(f"  Processing in {n_chunks} chunks ({chunk_size:,} roads per chunk)")
+        
+        for i in range(n_chunks):
+            start_idx = i * chunk_size
+            end_idx = min((i + 1) * chunk_size, len(roads))
+            chunk = roads.iloc[start_idx:end_idx]
+            
+            if n_chunks > 1:
+                print(f"  Chunk {i+1}/{n_chunks}: {len(chunk):,} roads")
+            
+            # Create shapes for this chunk
+            shapes = [(geom, 1) for geom in chunk.geometry if geom is not None]
+            
+            # Rasterize chunk and combine with existing mask
+            chunk_mask = rasterize(
+                shapes=shapes,
+                out_shape=raster_shape,
+                transform=transform,
+                fill=0,
+                dtype=np.uint8,
+                all_touched=True  # Include pixels touched by roads
+            )
+            
+            # Combine with existing mask (OR operation)
+            road_mask = np.maximum(road_mask, chunk_mask)
         
         road_pixels = np.sum(road_mask)
         total_pixels = road_mask.size

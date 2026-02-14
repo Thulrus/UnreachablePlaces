@@ -58,8 +58,8 @@ class DistanceCalculator:
         # Compute distance in pixels
         distance_pixels = distance_transform_edt(inverted_mask)
 
-        # Convert to meters
-        distance_meters = distance_pixels * resolution
+        # Convert to meters (use float32 to save memory)
+        distance_meters = (distance_pixels * resolution).astype(np.float32)
 
         # Statistics
         max_distance = np.max(distance_meters)
@@ -131,7 +131,7 @@ class DistanceCalculator:
         # The cumulative cost is in "cost units" which roughly correspond to
         # distance × terrain_difficulty_factor
         # For display purposes, we scale by resolution to get "effective distance"
-        distance_meters = cumulative_costs * resolution
+        distance_meters = (cumulative_costs * resolution).astype(np.float32)
 
         # Statistics
         max_distance = np.max(distance_meters[np.isfinite(distance_meters)])
