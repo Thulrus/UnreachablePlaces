@@ -133,17 +133,31 @@ class DataFetcher:
                 road_filter = '["highway"~"' + '|'.join(road_types) + '"]'
                 G = ox.graph_from_polygon(polygon,
                                           network_type='drive',
-                                          custom_filter=road_filter)
+                                          custom_filter=road_filter,
+                                          simplify=False)
             else:
                 # Use default drive network
-                G = ox.graph_from_polygon(polygon, network_type='drive')
+                G = ox.graph_from_polygon(polygon, network_type='drive', simplify=False)
+
+            print(f"Downloaded graph with {len(G.edges)} edges")
+            
+            # Simplify graph to reduce memory usage (merges consecutive segments)
+            # This is CRITICAL for dense road networks like Pennsylvania
+            print("Simplifying graph to reduce memory usage...")
+            G = ox.simplify_graph(G)
+            
+            print(f"Simplified to {len(G.edges)} edges (merged consecutive segments)")
 
             # Convert to GeoDataFrame
+            # For very large graphs, this might still use a lot of memory
+            # but simplification typically reduces edges by 10-50x
+            print("Converting to GeoDataFrame...")
             edges = ox.graph_to_gdfs(G, nodes=False, edges=True)
 
-            print(f"Downloaded {len(edges)} road segments")
+            print(f"Converted {len(edges)} road segments")
 
-            # Save to file
+            # Save to file (use fiona driver for better memory handling)
+            print("Saving to file...")
             edges.to_file(output_path, driver='GeoJSON')
             print(f"Saved roads to {output_path}")
 
