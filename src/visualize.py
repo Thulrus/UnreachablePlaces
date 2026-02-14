@@ -166,6 +166,165 @@ class Visualizer:
 
         return output_path
 
+    def create_labeled_map(self,
+                          distance_field: np.ndarray,
+                          boundary: gpd.GeoDataFrame,
+                          roads: gpd.GeoDataFrame,
+                          top_10_points: list,
+                          metadata: Dict,
+                          output_path: Optional[Path] = None) -> Path:
+        """
+        Create a static map showing top 10 unreachable locations with labels.
+        
+        Args:
+            distance_field: Distance field array
+            boundary: Boundary GeoDataFrame
+            roads: Roads GeoDataFrame
+            top_10_points: List of top 10 unreachable point dictionaries
+            metadata: Raster metadata
+            output_path: Path to save figure. If None, uses default.
+            
+        Returns:
+            Path to saved figure
+        """
+        print("Creating labeled map with top 10 locations...")
+
+        if output_path is None:
+            state_name = self.config.state_name.lower()
+            output_path = self.config.get_path(
+                'maps') / f"{state_name}_top10_labeled_map.png"
+
+        # Create figure
+        figsize = self.config.get('visualization.figsize', [12, 10])
+        fig, ax = plt.subplots(figsize=figsize)
+
+        # Get transform for extent
+        transform = metadata['transform']
+        bounds = metadata['bounds']
+        extent = [bounds[0], bounds[2], bounds[1], bounds[3]]
+
+        # Plot distance field as heatmap
+        cmap = self.config.get('visualization.colormap', 'YlOrRd')
+        distance_km = distance_field / 1000
+
+        im = ax.imshow(distance_km,
+                       extent=extent,
+                       origin='upper',
+                       cmap=cmap,
+                       interpolation='bilinear',
+                       alpha=0.7)
+
+        # Add colorbar
+        cbar = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+        cbar.set_label('Distance from Road (km)',
+                       rotation=270,
+                       labelpad=20,
+                       fontsize=12)
+
+        # Plot boundary
+        boundary.boundary.plot(ax=ax,
+                               color='black',
+                               linewidth=2,
+                               label='State Boundary')
+
+        # Plot roads (light background)
+        if len(roads) > 10000:
+            roads_sample = roads.sample(n=10000, random_state=42)
+        else:
+            roads_sample = roads
+
+        roads_sample.plot(ax=ax,
+                          color='gray',
+                          linewidth=0.2,
+                          alpha=0.2)
+
+        # Plot top 10 points with numbered labels
+        colors = plt.cm.rainbow(np.linspace(0, 1, 10))
+        
+        for point in top_10_points:
+            rank = point['rank']
+            point_x = point['x_projected']
+            point_y = point['y_projected']
+            dist_km = point['distance_km']
+            
+            # Plot marker
+            ax.plot(point_x, point_y,
+                   'o',
+                   color=colors[rank-1],
+                   markersize=14,
+                   markeredgecolor='white',
+                   markeredgewidth=2,
+                   zorder=5)
+            
+            # Add number label on marker
+            ax.text(point_x, point_y,
+                   str(rank),
+                   ha='center', va='center',
+                   color='white',
+                   fontsize=9,
+                   fontweight='bold',
+                   zorder=6)
+            
+            # Add annotation with distance
+            offset_x = 20 if rank % 2 == 0 else -20
+            offset_y = 20 if rank <= 5 else -20
+            ha = 'left' if rank % 2 == 0 else 'right'
+            
+            ax.annotate(f"#{rank}: {dist_km:.1f} km",
+                       xy=(point_x, point_y),
+                       xytext=(offset_x, offset_y),
+                       textcoords='offset points',
+                       bbox=dict(boxstyle='round,pad=0.4',
+                                facecolor='white',
+                                edgecolor=colors[rank-1],
+                                linewidth=2,
+                                alpha=0.9),
+                       arrowprops=dict(arrowstyle='->',
+                                     connectionstyle='arc3,rad=0.2',
+                                     color=colors[rank-1],
+                                     linewidth=1.5),
+                       fontsize=8,
+                       fontweight='bold',
+                       ha=ha)
+
+        # Set labels and title
+        ax.set_xlabel('Easting (m)', fontsize=12)
+        ax.set_ylabel('Northing (m)', fontsize=12)
+        ax.set_title(
+            f'Top 10 Most Unreachable Locations in {self.config.state_name}\n'
+            f'Ranked by Euclidean Distance from Roads',
+            fontsize=14,
+            fontweight='bold',
+            pad=20)
+
+        # Add grid
+        ax.grid(True, alpha=0.3, linestyle='--', linewidth=0.5)
+
+        # Create custom legend for top 10
+        legend_elements = [mpatches.Patch(facecolor=colors[i], 
+                                         edgecolor='white',
+                                         label=f"#{i+1}: {top_10_points[i]['distance_km']:.1f} km")
+                          for i in range(10)]
+        
+        ax.legend(handles=legend_elements,
+                 loc='upper left',
+                 fontsize=8,
+                 framealpha=0.95,
+                 title='Top 10 Locations',
+                 title_fontsize=9)
+
+        # Tight layout
+        plt.tight_layout()
+
+        # Save
+        dpi = self.config.get('visualization.dpi', 300)
+        plt.savefig(output_path, dpi=dpi, bbox_inches='tight')
+        print(f"  Saved labeled map to {output_path}")
+
+        plt.close()
+
+        return output_path
+
     def create_interactive_map(self,
                                distance_field: np.ndarray,
                                boundary: gpd.GeoDataFrame,
@@ -325,6 +484,7 @@ class Visualizer:
         boundary = processed_data['boundary']
         roads = processed_data['roads']
         unreachable_point = results['most_unreachable_point']
+        top_10_points = results['top_10_unreachable']
 
         outputs = {}
 
@@ -336,9 +496,17 @@ class Visualizer:
                                                  metadata)
             outputs['static_map'] = static_path
 
+        # Labeled map with top 10
+        if self.config.get('output.labeled_map', True):
+            print("\n2. Creating labeled map with top 10 locations...")
+            labeled_path = self.create_labeled_map(distance_field, boundary,
+                                                   roads, top_10_points,
+                                                   metadata)
+            outputs['labeled_map'] = labeled_path
+
         # Interactive map
         if self.config.get('output.interactive_map', True):
-            print("\n2. Creating interactive map...")
+            print("\n3. Creating interactive map...")
             interactive_path = self.create_interactive_map(
                 distance_field, boundary, roads, unreachable_point, results)
             outputs['interactive_map'] = interactive_path
