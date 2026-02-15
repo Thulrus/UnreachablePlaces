@@ -116,20 +116,30 @@ class CostSurfaceGenerator:
     Generates composite cost surfaces from DEM and land cover data.
     """
 
-    def __init__(self, config_path: str = "config.yaml"):
+    def __init__(self, config=None):
         """
         Initialize the cost surface generator.
         
         Args:
-            config_path: Path to configuration file
+            config: Configuration object or path to config file. If None, uses default config.
         """
-        with open(config_path, 'r') as f:
-            self.config = yaml.safe_load(f)
+        from .config import get_config
+
+        # Handle config parameter
+        if config is None:
+            self.config = get_config()
+        elif isinstance(config, (str, Path)):
+            # Config path provided
+            self.config = get_config(str(config))
+        else:
+            # Config object provided
+            self.config = config
 
         self.project_dir = Path(__file__).parent.parent
-        self.raw_dir = self.project_dir / self.config['paths']['raw_data']
-        self.processed_dir = self.project_dir / self.config['paths'][
-            'processed_data']
+        self.raw_dir = self.project_dir / self.config.get(
+            'paths.raw_data', 'data/raw')
+        self.processed_dir = self.project_dir / self.config.get(
+            'paths.processed_data', 'data/processed')
 
         # Get cost distance configuration
         self.cost_config = self.config.get('cost_distance', {})
@@ -256,33 +266,36 @@ class CostSurfaceGenerator:
             Tuple of (cost_surface array, profile dict)
         """
         logger.info("Generating composite cost surface")
-        
+
         # Determine reference raster (use whichever is available)
         reference_path = dem_path if dem_path else landcover_path
         if not reference_path:
             raise ValueError("Must provide at least DEM or land cover")
-        
+
         # Get reference shape and profile
         with rasterio.open(reference_path) as src:
             reference_shape = (src.height, src.width)
             profile = src.profile
-        
+
         # Calculate slope costs
         if dem_path:
             slope_degrees = self.calculate_slope(dem_path)
             slope_costs = slope_cost_factor(slope_degrees, self.config)
         else:
             # No DEM: assume flat terrain (cost = 1.0)
-            logger.info("No DEM provided, assuming flat terrain (slope cost = 1.0)")
+            logger.info(
+                "No DEM provided, assuming flat terrain (slope cost = 1.0)")
             slope_costs = np.ones(reference_shape, dtype=np.float32)
-        
+
         # Calculate land cover costs
         if landcover_path:
             landcover = self.resample_landcover(landcover_path, reference_path)
             landcover_costs = landcover_cost_factor(landcover)
         else:
             # No land cover: use uniform cost (cost = 1.0)
-            logger.info("No land cover provided, using uniform cost (landcover cost = 1.0)")
+            logger.info(
+                "No land cover provided, using uniform cost (landcover cost = 1.0)"
+            )
             landcover_costs = np.ones(reference_shape, dtype=np.float32)
 
         # Combine costs with weights
@@ -320,7 +333,7 @@ class CostSurfaceGenerator:
             Path to generated cost surface file
         """
         from .extract_terrain import ensure_terrain_data
-        
+
         state_lower = state_name.lower()
 
         # Define output paths
@@ -336,14 +349,13 @@ class CostSurfaceGenerator:
         # Ensure terrain data exists (auto-extracts from national files if configured)
         print(f"\nChecking terrain data for {state_name}...")
         dem_path, landcover_path = ensure_terrain_data(self.config, state_name)
-        
+
         if not dem_path and not landcover_path:
             raise FileNotFoundError(
                 "Neither DEM nor land cover available. Cost-distance requires at least one.\n"
                 "Either:\n"
                 "  1. Configure local_file paths in config.yaml, or\n"
-                "  2. Manually download terrain data for this state"
-            )
+                "  2. Manually download terrain data for this state")
 
         # Generate outputs
         logger.info(f"Processing cost surface for {state_name}")
@@ -361,13 +373,13 @@ class CostSurfaceGenerator:
         elif dem_path:
             print("Generating cost surface with DEM only (no land cover)...")
         else:
-            print("Generating cost surface with land cover only (flat terrain assumed)...")
-            
+            print(
+                "Generating cost surface with land cover only (flat terrain assumed)..."
+            )
+
         cost_surface_highres, profile = self.generate_cost_surface(
-            str(dem_path) if dem_path else None, 
-            str(landcover_path) if landcover_path else None, 
-            None
-        )
+            str(dem_path) if dem_path else None,
+            str(landcover_path) if landcover_path else None, None)
 
         # Resample cost surface to match road mask resolution
         print(

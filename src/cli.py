@@ -124,29 +124,8 @@ def cost_surface(ctx):
                        err=True)
             return 1
 
-        # Check if DEM and land cover exist
-        state_name = config.state_name.lower()
-        raw_data_path = config.get_path('raw_data')
-
-        dem_file = raw_data_path / f"{state_name}_dem.tif"
-        landcover_file = raw_data_path / f"{state_name}_landcover.tif"
-
-        if not dem_file.exists():
-            click.echo(f"✗ DEM not found: {dem_file}", err=True)
-            click.echo(
-                "  Run 'fetch-data' with cost_distance.enabled: true first.",
-                err=True)
-            return 1
-
-        if not landcover_file.exists():
-            click.echo(f"✗ Land cover not found: {landcover_file}", err=True)
-            click.echo(
-                "  Run 'fetch-data' with cost_distance.enabled: true first.",
-                err=True)
-            return 1
-
-        # Generate cost surface
-        generator = CostSurfaceGenerator()
+        # Generate cost surface (will auto-extract from national files if configured)
+        generator = CostSurfaceGenerator(config)
         cost_path = generator.process_state(config.state_name)
 
         click.echo("\n✓ Cost surface generation complete!")
