@@ -7,6 +7,8 @@ when cost-distance analysis is enabled.
 import subprocess
 import sys
 from pathlib import Path
+from typing import List
+import re
 
 from .config import get_config
 
@@ -60,6 +62,198 @@ def extract_from_national_file(national_file: Path, state_boundary_path: Path,
         return False
 
 
+def parse_gmted_tile_bounds(folder_name: str) -> tuple[float, float, float, float] | None:
+    """
+    Parse GMTED2010 folder name to extract geographic bounds.
+    
+    Example: GMTED2010N30W120_075 means:
+    - N30: starts at 30°N
+    - W120: starts at 120°W
+    - Tiles are 30° longitude × 20° latitude
+    
+    Args:
+        folder_name: e.g., "GMTED2010N30W120_075"
+        
+    Returns:
+        Tuple of (min_lon, min_lat, max_lon, max_lat) or None if invalid
+    """
+    pattern = r'GMTED2010N(\d+)W(\d+)_\d+'
+    match = re.match(pattern, folder_name)
+    
+    if not match:
+        return None
+        
+    lat_start = int(match.group(1))
+    lon_start = int(match.group(2))
+    
+    # GMTED tiles are 30° wide (longitude) × 20° tall (latitude)
+    min_lon = -lon_start
+    max_lon = min_lon + 30
+    min_lat = lat_start
+    max_lat = lat_start + 20
+    
+    return (min_lon, min_lat, max_lon, max_lat)
+
+
+def find_gmted_tiles(gmted_dir: Path, state_bounds: tuple[float, float, float, float],
+                     variant: str = 'mea') -> List[Path]:
+    """
+    Find all GMTED tiles that intersect with given state bounds.
+    
+    Args:
+        gmted_dir: Path to GMTED2010 directory
+        state_bounds: Tuple of (min_lon, min_lat, max_lon, max_lat) in EPSG:4326
+        variant: GMTED variant to use (mea, med, min, max, etc.)
+        
+    Returns:
+        List of paths to GMTED .tif files that cover the state
+    """
+    if not gmted_dir.exists():
+        return []
+    
+    state_min_lon, state_min_lat, state_max_lon, state_max_lat = state_bounds
+    matching_tiles = []
+    
+    # Scan all GMTED tile folders
+    for tile_dir in sorted(gmted_dir.iterdir()):
+        if not tile_dir.is_dir() or not tile_dir.name.startswith('GMTED2010'):
+            continue
+            
+        tile_bounds = parse_gmted_tile_bounds(tile_dir.name)
+        if not tile_bounds:
+            continue
+            
+        tile_min_lon, tile_min_lat, tile_max_lon, tile_max_lat = tile_bounds
+        
+        # Check for intersection
+        if (tile_max_lon >= state_min_lon and tile_min_lon <= state_max_lon and
+            tile_max_lat >= state_min_lat and tile_min_lat <= state_max_lat):
+            
+            # Find the specific variant file
+            pattern = f"*_gmted_{variant}075.tif"
+            matching_files = list(tile_dir.glob(pattern))
+            
+            if matching_files:
+                matching_tiles.append(matching_files[0])
+                
+    return matching_tiles
+
+
+def create_gmted_vrt(gmted_tiles: List[Path], output_vrt: Path) -> bool:
+    """
+    Create a virtual raster (VRT) that mosaics multiple GMTED tiles.
+    
+    Args:
+        gmted_tiles: List of GMTED .tif files to mosaic
+        output_vrt: Path where VRT should be saved
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    if not gmted_tiles:
+        return False
+        
+    try:
+        cmd = ['gdalbuildvrt', str(output_vrt)] + [str(t) for t in gmted_tiles]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        
+        if result.returncode == 0:
+            return True
+        else:
+            print(f"  ✗ gdalbuildvrt failed: {result.stderr}")
+            return False
+            
+    except subprocess.TimeoutExpired:
+        print(f"  ✗ VRT creation timed out")
+        return False
+    except FileNotFoundError:
+        print(f"  ✗ gdalbuildvrt not found. Install GDAL: sudo apt install gdal-bin")
+        return False
+    except Exception as e:
+        print(f"  ✗ VRT creation error: {e}")
+        return False
+
+
+def extract_dem_from_gmted(gmted_dir: Path, state_boundary_path: Path,
+                           output_path: Path, variant: str = 'mea') -> bool:
+    """
+    Extract state DEM from GMTED2010 tiles.
+    
+    This will:
+    1. Find which GMTED tiles cover the state
+    2. Create a VRT to mosaic them (if multiple)
+    3. Extract the state area using gdalwarp
+    
+    Args:
+        gmted_dir: Path to GMTED2010 directory
+        state_boundary_path: Path to state boundary GeoJSON
+        output_path: Where to save extracted DEM
+        variant: GMTED variant ('mea' for mean, 'med' for median, etc.)
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        print(f"Extracting DEM from GMTED2010 ({variant} variant)...")
+        
+        # Get state bounds to find relevant tiles
+        import geopandas as gpd
+        boundary = gpd.read_file(state_boundary_path)
+        bounds_4326 = boundary.to_crs('EPSG:4326').total_bounds
+        
+        # Find tiles
+        tiles = find_gmted_tiles(gmted_dir, tuple(bounds_4326), variant)
+        
+        if not tiles:
+            print(f"  ✗ No GMTED tiles found covering the state")
+            return False
+            
+        print(f"  Found {len(tiles)} GMTED tile(s): {[t.parent.name for t in tiles]}")
+        
+        # Create VRT if multiple tiles, or use single tile directly
+        if len(tiles) == 1:
+            source_raster = tiles[0]
+        else:
+            vrt_path = output_path.parent / f"{output_path.stem}_gmted.vrt"
+            print(f"  Creating VRT mosaic...")
+            if not create_gmted_vrt(tiles, vrt_path):
+                return False
+            source_raster = vrt_path
+            
+        # Extract state area
+        print(f"  Extracting state area...")
+        cmd = [
+            'gdalwarp',
+            '-cutline', str(state_boundary_path),
+            '-crop_to_cutline',
+            '-co', 'COMPRESS=LZW',
+            str(source_raster),
+            str(output_path)
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        
+        if result.returncode == 0:
+            print(f"  ✓ Extracted DEM to {output_path}")
+            
+            # Clean up VRT if we created one
+            if len(tiles) > 1:
+                vrt_path.unlink(missing_ok=True)
+                
+            return True
+        else:
+            print(f"  ✗ gdalwarp failed: {result.stderr}")
+            return False
+            
+    except subprocess.TimeoutExpired:
+        print(f"  ✗ Extraction timed out")
+        return False
+    except Exception as e:
+        print(f"  ✗ Extraction error: {e}")
+        return False
+
+
 def ensure_terrain_data(config,
                         state_name: str) -> tuple[Path | None, Path | None]:
     """
@@ -92,29 +286,44 @@ def ensure_terrain_data(config,
 
     if dem_enabled:
         if not dem_path.exists():
-            # Try local extraction first
-            local_dem = config.get('cost_distance.terrain_data.dem.local_file')
-            if local_dem:
-                local_dem_path = Path(local_dem)
-                if local_dem_path.exists():
-                    print(
-                        f"DEM not found for {state_name}, extracting from {local_dem_path.name}..."
-                    )
-                    if extract_from_national_file(local_dem_path,
-                                                  boundary_path, dem_path):
+            # Try GMTED2010 first if available
+            gmted_dir_config = config.get('cost_distance.terrain_data.dem.gmted_dir')
+            if gmted_dir_config:
+                gmted_dir = Path(gmted_dir_config)
+                if gmted_dir.exists():
+                    gmted_variant = config.get('cost_distance.terrain_data.dem.gmted_variant', 'mea')
+                    print(f"DEM not found for {state_name}, extracting from GMTED2010...")
+                    if extract_dem_from_gmted(gmted_dir, boundary_path, dem_path, gmted_variant):
                         dem_final = dem_path
                     else:
-                        print(
-                            "  Warning: Extraction failed, continuing without DEM (flat terrain assumed)"
-                        )
+                        print("  Warning: GMTED extraction failed")
                 else:
-                    print(f"  Warning: Local DEM file not found: {local_dem}")
+                    print(f"  Warning: GMTED directory not found: {gmted_dir}")
+                    
+            # Fall back to local_file if GMTED didn't work
+            if not dem_final:
+                local_dem = config.get('cost_distance.terrain_data.dem.local_file')
+                if local_dem:
+                    local_dem_path = Path(local_dem)
+                    if local_dem_path.exists():
+                        print(
+                            f"DEM not found for {state_name}, extracting from {local_dem_path.name}..."
+                        )
+                        if extract_from_national_file(local_dem_path,
+                                                      boundary_path, dem_path):
+                            dem_final = dem_path
+                        else:
+                            print(
+                                "  Warning: Extraction failed, continuing without DEM (flat terrain assumed)"
+                            )
+                    else:
+                        print(f"  Warning: Local DEM file not found: {local_dem}")
+                        print("  Continuing without DEM (flat terrain assumed)")
+                else:
+                    print(
+                        f"  Warning: DEM not found for {state_name} and no source configured"
+                    )
                     print("  Continuing without DEM (flat terrain assumed)")
-            else:
-                print(
-                    f"  Warning: DEM not found for {state_name} and no local source configured"
-                )
-                print("  Continuing without DEM (flat terrain assumed)")
         else:
             dem_final = dem_path
     else:

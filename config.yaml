@@ -82,11 +82,17 @@ cost_distance:
     dem:
       enabled: true  # Set to false to skip DEM/slope (assumes flat terrain)
       
-      # Option 1: Use local file (automatic extraction for any state)
-      # If local_file is set, it will be used instead of downloading
+      # Option 1: GMTED2010 (RECOMMENDED - covers all US with decent resolution)
+      # Point to the GMTED2010 directory containing tile subdirectories
+      gmted_dir: "data/raw/GMTED2010"
+      # GMTED variant: mea=mean, med=median, min=minimum, max=maximum
+      gmted_variant: "mea"
+      
+      # Option 2: Use local file (automatic extraction for any state)
+      # If local_file is set and GMTED fails, it will be used as fallback
       local_file: null  # e.g., "data/raw/national_dem.tif"
       
-      # Option 2: Download from USGS (often fails, requires manual download)
+      # Option 3: Download from USGS (often fails, requires manual download)
       source: "USGS_3DEP"
       url_template: "https://prd-tnm.s3.amazonaws.com/index.html?prefix=StagedProducts/Elevation/13/TIFF/"
     

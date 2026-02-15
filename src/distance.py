@@ -289,6 +289,14 @@ class DistanceCalculator:
             else:
                 with rasterio.open(cost_surface_path) as src:
                     cost_surface = src.read(1)
+                    nodata = src.nodata
+                    
+                # Handle nodata values
+                if nodata is not None:
+                    # Replace nodata with neutral cost (1.0)
+                    # Nodata areas are typically outside boundary or in water
+                    cost_surface = np.where(cost_surface == nodata, 1.0, cost_surface)
+                
                 print(f"  Cost surface loaded: {cost_surface.shape}")
 
         # Compute distance field
