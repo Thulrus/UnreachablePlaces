@@ -754,21 +754,12 @@ class DataFetcher:
             if len(settlements) > 0:
                 data['settlements'] = settlements
 
-        # Fetch DEM and land cover if cost-distance is enabled
+        # Note: DEM and land cover are now automatically extracted during
+        # cost-surface generation via ensure_terrain_data()
+        # This uses GMTED2010 or local files configured in config.yaml
         if self.config.get('cost_distance.enabled', False):
-            print("\nCost-distance mode enabled. Fetching terrain data...")
-
-            try:
-                dem_path = self.fetch_dem(boundary)
-                data['dem'] = dem_path
-            except Exception as e:
-                print(f"Warning: Could not fetch DEM: {e}")
-
-            try:
-                landcover_path = self.fetch_landcover(boundary)
-                data['landcover'] = landcover_path
-            except Exception as e:
-                print(f"Warning: Could not fetch land cover: {e}")
+            print("\nCost-distance mode enabled.")
+            print("Terrain data (DEM/landcover) will be extracted automatically during cost-surface generation.")
 
         print("=" * 60)
         print("DATA FETCH COMPLETE")
