@@ -294,9 +294,9 @@ class DistanceCalculator:
 
                 # Handle nodata values
                 if nodata is not None:
-                    # Replace nodata with neutral cost (1.0)
-                    # Nodata areas are typically outside boundary or in water
-                    cost_surface = np.where(cost_surface == nodata, 1.0,
+                    # Replace nodata with infinity (impassable)
+                    # Nodata represents water bodies - MCP will route around them
+                    cost_surface = np.where(cost_surface == nodata, np.inf,
                                             cost_surface)
 
                 print(f"  Cost surface loaded: {cost_surface.shape}")

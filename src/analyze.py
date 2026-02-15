@@ -76,6 +76,9 @@ class UnreachabilityAnalyzer:
             # Set excluded areas to NaN
             working_field[~land_mask] = np.nan
             print(f"  Applying land mask (excluding water/ice)")
+        
+        # Also exclude infinite values (unreachable islands/areas)
+        working_field[np.isinf(working_field)] = np.nan
 
         # Find maximum ignoring NaN
         max_distance = np.nanmax(working_field)
@@ -150,6 +153,9 @@ class UnreachabilityAnalyzer:
         if land_mask is not None:
             working_field[~land_mask] = np.nan
             print(f"  Applying land mask (excluding water/ice)")
+        
+        # Exclude infinite values (unreachable islands/areas)
+        working_field[np.isinf(working_field)] = np.nan
 
         # Create coordinate grids for distance calculation
         rows, cols = np.meshgrid(np.arange(working_field.shape[0]),
@@ -282,7 +288,7 @@ class UnreachabilityAnalyzer:
 
         # Calculate statistics
         print("\n4. Computing statistics...")
-        valid_distances = distance_field[~np.isnan(distance_field)]
+        valid_distances = distance_field[np.isfinite(distance_field)]
 
         stats = {
             'max_distance_m': float(np.max(valid_distances)),
