@@ -80,8 +80,8 @@ class UnreachabilityAnalyzer:
         # Find maximum ignoring NaN
         max_distance = np.nanmax(working_field)
 
-        # Find pixel coordinates of maximum
-        max_indices = np.where(distance_field == max_distance)
+        # Find pixel coordinates of maximum IN THE MASKED FIELD
+        max_indices = np.where(working_field == max_distance)
 
         # Take first occurrence if multiple maxima
         row = max_indices[0][0]

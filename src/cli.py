@@ -226,7 +226,7 @@ def find_unreachable(ctx):
         # Check which distance mode was used
         raw_state_folder = raw_path / state_name
         processed_state_folder = processed_path / state_name
-        
+
         if config.get('cost_distance.enabled', False):
             distance_file = processed_state_folder / "distance_cost.tif"
         else:
@@ -332,7 +332,7 @@ def visualize(ctx):
 
         # Check which distance mode was used
         processed_state_folder = processed_path / state_name
-        
+
         if config.get('cost_distance.enabled', False):
             distance_file = processed_state_folder / "distance_cost.tif"
         else:
@@ -427,10 +427,8 @@ def run_all(ctx, skip_fetch):
             import geopandas as gpd
 
             data = {
-                'boundary':
-                gpd.read_file(state_folder / "boundary.geojson"),
-                'roads':
-                gpd.read_file(state_folder / "roads.geojson")
+                'boundary': gpd.read_file(state_folder / "boundary.geojson"),
+                'roads': gpd.read_file(state_folder / "roads.geojson")
             }
 
         # Step 2: Preprocess

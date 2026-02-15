@@ -287,7 +287,7 @@ def ensure_terrain_data(config,
     raw_dir = config.get_path('raw_data')
     state_folder = raw_dir / state_lower
     state_folder.mkdir(parents=True, exist_ok=True)
-    
+
     dem_path = state_folder / "dem.tif"
     landcover_path = state_folder / "landcover.tif"
     boundary_path = state_folder / "boundary.geojson"

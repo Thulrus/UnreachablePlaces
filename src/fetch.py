@@ -63,7 +63,7 @@ class DataFetcher:
         # Create state-specific folder
         state_folder = self.config.get_path('raw_data') / state_name.lower()
         state_folder.mkdir(parents=True, exist_ok=True)
-        
+
         output_path = state_folder / "boundary.geojson"
 
         # Check if already exists
@@ -264,11 +264,11 @@ class DataFetcher:
             boundary = self.fetch_state_boundary()
 
         state_name = self.config.state_name
-        
+
         # Create state-specific folder
         state_folder = self.config.get_path('raw_data') / state_name.lower()
         state_folder.mkdir(parents=True, exist_ok=True)
-        
+
         output_path = state_folder / "roads.geojson"
 
         # Check if already exists
@@ -759,7 +759,9 @@ class DataFetcher:
         # This uses GMTED2010 or local files configured in config.yaml
         if self.config.get('cost_distance.enabled', False):
             print("\nCost-distance mode enabled.")
-            print("Terrain data (DEM/landcover) will be extracted automatically during cost-surface generation.")
+            print(
+                "Terrain data (DEM/landcover) will be extracted automatically during cost-surface generation."
+            )
 
         print("=" * 60)
         print("DATA FETCH COMPLETE")
