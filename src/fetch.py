@@ -60,8 +60,11 @@ class DataFetcher:
         # Download state boundaries from Census Bureau
         url = "https://www2.census.gov/geo/tiger/GENZ2022/shp/cb_2022_us_state_20m.zip"
 
-        output_path = self.config.get_path(
-            'raw_data') / f"{state_name.lower()}_boundary.geojson"
+        # Create state-specific folder
+        state_folder = self.config.get_path('raw_data') / state_name.lower()
+        state_folder.mkdir(parents=True, exist_ok=True)
+        
+        output_path = state_folder / "boundary.geojson"
 
         # Check if already exists
         if output_path.exists():
@@ -261,8 +264,12 @@ class DataFetcher:
             boundary = self.fetch_state_boundary()
 
         state_name = self.config.state_name
-        output_path = self.config.get_path(
-            'raw_data') / f"{state_name.lower()}_roads.geojson"
+        
+        # Create state-specific folder
+        state_folder = self.config.get_path('raw_data') / state_name.lower()
+        state_folder.mkdir(parents=True, exist_ok=True)
+        
+        output_path = state_folder / "roads.geojson"
 
         # Check if already exists
         if output_path.exists():

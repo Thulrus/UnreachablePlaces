@@ -272,15 +272,15 @@ class DataPreprocessor:
             # Save processed vectors
             processed_dir = self.config.get_path('processed_data')
             state_name = self.config.state_name.lower()
+            state_folder = processed_dir / state_name
+            state_folder.mkdir(parents=True, exist_ok=True)
 
-            boundary.to_file(processed_dir /
-                             f"{state_name}_boundary_projected.geojson")
-            roads_clipped.to_file(processed_dir /
-                                  f"{state_name}_roads_clipped.geojson")
+            boundary.to_file(state_folder / "boundary_projected.geojson")
+            roads_clipped.to_file(state_folder / "roads_clipped.geojson")
 
             # Save road mask raster
             self.save_raster(road_mask, metadata,
-                             processed_dir / f"{state_name}_road_mask.tif")
+                             state_folder / "road_mask.tif")
 
         print("=" * 60)
         print("PREPROCESSING COMPLETE")

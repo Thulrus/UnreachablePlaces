@@ -19,9 +19,11 @@ logger = logging.getLogger(__name__)
 
 # National Land Cover Database 2021 classification
 # Source: https://www.mrlc.gov/data/legends/national-land-cover-database-class-legend-and-description
+# Cost represents difficulty of foot travel
+# Large bodies of water force routing around rather than through
 LANDCOVER_COSTS = {
-    11: 10.0,  # Open Water - very difficult to traverse
-    12: 8.0,  # Perennial Ice/Snow - extremely difficult
+    11: 20.0,  # Open Water - strong barrier (walk around, not across)
+    12: 15.0,  # Perennial Ice/Snow - very difficult
     21: 1.1,  # Developed, Open Space - slightly harder than open ground
     22: 1.3,  # Developed, Low Intensity - some obstacles
     23: 1.5,  # Developed, Medium Intensity - more obstacles
@@ -35,7 +37,7 @@ LANDCOVER_COSTS = {
     81: 1.1,  # Pasture/Hay - very easy, maintained
     82: 1.3,  # Cultivated Crops - some obstacles
     90: 3.0,  # Woody Wetlands - difficult terrain
-    95: 4.0,  # Emergent Herbaceous Wetlands - very difficult
+    95: 5.0,  # Emergent Herbaceous Wetlands - very difficult
 }
 
 
@@ -335,11 +337,13 @@ class CostSurfaceGenerator:
         from .extract_terrain import ensure_terrain_data
 
         state_lower = state_name.lower()
+        state_folder = self.processed_dir / state_lower
+        state_folder.mkdir(parents=True, exist_ok=True)
 
         # Define output paths
-        road_mask_path = self.processed_dir / f"{state_lower}_road_mask.tif"
-        slope_path = self.processed_dir / f"{state_lower}_slope.tif"
-        cost_path = self.processed_dir / f"{state_lower}_cost_surface.tif"
+        road_mask_path = state_folder / "road_mask.tif"
+        slope_path = state_folder / "slope.tif"
+        cost_path = state_folder / "cost_surface.tif"
 
         # Check if road mask exists (needed for resampling target)
         if not road_mask_path.exists():

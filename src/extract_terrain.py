@@ -283,11 +283,14 @@ def ensure_terrain_data(config,
     """
     state_lower = state_name.lower()
 
-    # Paths
+    # Paths - use state-specific folder
     raw_dir = config.get_path('raw_data')
-    dem_path = raw_dir / f"{state_lower}_dem.tif"
-    landcover_path = raw_dir / f"{state_lower}_landcover.tif"
-    boundary_path = raw_dir / f"{state_lower}_boundary.geojson"
+    state_folder = raw_dir / state_lower
+    state_folder.mkdir(parents=True, exist_ok=True)
+    
+    dem_path = state_folder / "dem.tif"
+    landcover_path = state_folder / "landcover.tif"
+    boundary_path = state_folder / "boundary.geojson"
 
     if not boundary_path.exists():
         print(f"Warning: State boundary not found: {boundary_path}")

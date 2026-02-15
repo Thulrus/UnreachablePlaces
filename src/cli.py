@@ -80,8 +80,9 @@ def preprocess(ctx):
 
         import geopandas as gpd
 
-        boundary_file = raw_data_path / f"{state_name}_boundary.geojson"
-        roads_file = raw_data_path / f"{state_name}_roads.geojson"
+        state_folder = raw_data_path / state_name
+        boundary_file = state_folder / "boundary.geojson"
+        roads_file = state_folder / "roads.geojson"
 
         if not boundary_file.exists() or not roads_file.exists():
             click.echo("✗ Data not found. Please run 'fetch_data' first.",
@@ -159,8 +160,10 @@ def compute_distance(ctx):
         import numpy as np
         import rasterio
 
-        boundary_file = processed_path / f"{state_name}_boundary_projected.geojson"
-        road_mask_file = processed_path / f"{state_name}_road_mask.tif"
+        state_folder = processed_path / state_name
+        state_folder.mkdir(parents=True, exist_ok=True)
+        boundary_file = state_folder / "boundary_projected.geojson"
+        road_mask_file = state_folder / "road_mask.tif"
 
         if not boundary_file.exists() or not road_mask_file.exists():
             click.echo(
@@ -221,12 +224,15 @@ def find_unreachable(ctx):
         import rasterio
 
         # Check which distance mode was used
+        raw_state_folder = raw_path / state_name
+        processed_state_folder = processed_path / state_name
+        
         if config.get('cost_distance.enabled', False):
-            distance_file = processed_path / f"{state_name}_distance_cost.tif"
+            distance_file = processed_state_folder / "distance_cost.tif"
         else:
-            distance_file = processed_path / f"{state_name}_distance.tif"
-        boundary_file = processed_path / f"{state_name}_boundary_projected.geojson"
-        landcover_file = raw_path / f"{state_name}_landcover.tif"
+            distance_file = processed_state_folder / "distance.tif"
+        boundary_file = processed_state_folder / "boundary_projected.geojson"
+        landcover_file = raw_state_folder / "landcover.tif"
 
         if not distance_file.exists():
             click.echo(
@@ -325,12 +331,14 @@ def visualize(ctx):
         import rasterio
 
         # Check which distance mode was used
+        processed_state_folder = processed_path / state_name
+        
         if config.get('cost_distance.enabled', False):
-            distance_file = processed_path / f"{state_name}_distance_cost.tif"
+            distance_file = processed_state_folder / "distance_cost.tif"
         else:
-            distance_file = processed_path / f"{state_name}_distance.tif"
-        boundary_file = processed_path / f"{state_name}_boundary_projected.geojson"
-        roads_file = processed_path / f"{state_name}_roads_clipped.geojson"
+            distance_file = processed_state_folder / "distance.tif"
+        boundary_file = processed_state_folder / "boundary_projected.geojson"
+        roads_file = processed_state_folder / "roads_clipped.geojson"
         results_file = config.get('output.results_file',
                                   'outputs/results.json')
 
@@ -414,15 +422,15 @@ def run_all(ctx, skip_fetch):
                 "\n[1/5] Skipping data fetch (loading existing data)...")
             state_name = config.state_name.lower()
             raw_data_path = config.get_path('raw_data')
+            state_folder = raw_data_path / state_name
 
             import geopandas as gpd
 
             data = {
                 'boundary':
-                gpd.read_file(raw_data_path /
-                              f"{state_name}_boundary.geojson"),
+                gpd.read_file(state_folder / "boundary.geojson"),
                 'roads':
-                gpd.read_file(raw_data_path / f"{state_name}_roads.geojson")
+                gpd.read_file(state_folder / "roads.geojson")
             }
 
         # Step 2: Preprocess

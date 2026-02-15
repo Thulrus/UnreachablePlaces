@@ -276,7 +276,8 @@ class DistanceCalculator:
             # Load cost surface
             state_name = self.config.state_name.lower()
             processed_path = self.config.get_path('processed_data')
-            cost_surface_path = processed_path / f"{state_name}_cost_surface.tif"
+            state_folder = processed_path / state_name
+            cost_surface_path = state_folder / "cost_surface.tif"
 
             if not cost_surface_path.exists():
                 print(
@@ -324,15 +325,16 @@ class DistanceCalculator:
         if self.config.get('output.save_intermediate', True):
             print("\n4. Saving distance raster...")
             state_name = self.config.state_name.lower()
+            state_folder = self.config.get_path('processed_data') / state_name
+            state_folder.mkdir(parents=True, exist_ok=True)
 
             # Use different filename for cost-distance vs euclidean
             if use_cost_distance:
-                output_filename = f"{state_name}_distance_cost.tif"
+                output_filename = "distance_cost.tif"
             else:
-                output_filename = f"{state_name}_distance.tif"
+                output_filename = "distance.tif"
 
-            output_path = self.config.get_path(
-                'processed_data') / output_filename
+            output_path = state_folder / output_filename
             self.save_distance_raster(distance_masked, metadata, output_path)
 
         print("=" * 60)
