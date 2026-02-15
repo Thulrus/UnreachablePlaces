@@ -137,26 +137,54 @@ class DataFetcher:
                                           simplify=False)
             else:
                 # Use default drive network
-                G = ox.graph_from_polygon(polygon, network_type='drive', simplify=False)
+                G = ox.graph_from_polygon(polygon,
+                                          network_type='drive',
+                                          simplify=False)
 
             print(f"Downloaded graph with {len(G.edges)} edges")
-            
+
             # Simplify graph to reduce memory usage (merges consecutive segments)
             # This is CRITICAL for dense road networks like Pennsylvania
             print("Simplifying graph to reduce memory usage...")
             G = ox.simplify_graph(G)
-            
-            print(f"Simplified to {len(G.edges)} edges (merged consecutive segments)")
 
-            # Convert to GeoDataFrame
-            # For very large graphs, this might still use a lot of memory
-            # but simplification typically reduces edges by 10-50x
+            edge_count = len(G.edges)
+            print(
+                f"Simplified to {edge_count} edges (merged consecutive segments)"
+            )
+
+            # For very large graphs (>1M edges), use more aggressive filtering
+            if edge_count > 1_000_000:
+                print(f"WARNING: Graph still too large ({edge_count:,} edges)")
+                print("Re-fetching with only major roads (motorway, trunk, primary, secondary)...")
+                
+                # More restrictive filter - only major roads
+                major_roads = ['motorway', 'trunk', 'primary', 'secondary',
+                              'motorway_link', 'trunk_link', 'primary_link', 'secondary_link']
+                road_filter = '["highway"~"' + '|'.join(major_roads) + '"]'
+                
+                G = ox.graph_from_polygon(polygon,
+                                          network_type='drive',
+                                          custom_filter=road_filter,
+                                          simplify=True)  # Simplify immediately
+                
+                edge_count = len(G.edges)
+                print(f"Re-downloaded and simplified to {edge_count:,} edges (major roads only)")
+
+            # Convert to GeoDataFrame using memory-efficient method
             print("Converting to GeoDataFrame...")
+            
+            # Keep only essential columns to reduce memory
             edges = ox.graph_to_gdfs(G, nodes=False, edges=True)
+            
+            essential_cols = ['geometry', 'highway', 'length']
+            if 'name' in edges.columns:
+                essential_cols.append('name')
+            edges = edges[essential_cols]
 
             print(f"Converted {len(edges)} road segments")
 
-            # Save to file (use fiona driver for better memory handling)
+            # Save to file
             print("Saving to file...")
             edges.to_file(output_path, driver='GeoJSON')
             print(f"Saved roads to {output_path}")
