@@ -8,6 +8,7 @@ This module handles:
 - Downloading DEM (Digital Elevation Model) from USGS 3DEP
 - Downloading land cover from NLCD
 """
+import gc
 import os
 import shutil
 import tempfile
@@ -17,6 +18,7 @@ from typing import Optional
 
 import geopandas as gpd
 import osmnx as ox
+import pandas as pd
 import rasterio
 import requests
 from rasterio.mask import mask
@@ -89,6 +91,160 @@ class DataFetcher:
             print(f"Error fetching state boundary: {e}")
             raise
 
+    def _fetch_roads_simple(self, polygon, road_filter):
+        """Fetch roads in a single query (for small states)."""
+        if road_filter:
+            G = ox.graph_from_polygon(polygon,
+                                      network_type='drive',
+                                      custom_filter=road_filter,
+                                      simplify=True)
+        else:
+            G = ox.graph_from_polygon(polygon,
+                                      network_type='drive',
+                                      simplify=True)
+
+        print(f"Downloaded {len(G.edges):,} edges")
+
+        # Convert to GeoDataFrame
+        edges = ox.graph_to_gdfs(G, nodes=False, edges=True)
+
+        # Keep only essential columns
+        essential_cols = ['geometry', 'highway', 'length']
+        if 'name' in edges.columns:
+            essential_cols.append('name')
+        edges = edges[[col for col in essential_cols if col in edges.columns]]
+
+        return edges
+
+    def _fetch_roads_chunked(self, polygon, road_filter, boundary_gdf):
+        """
+        Fetch roads in geographic chunks to prevent memory issues.
+        
+        Divides the state into a grid and fetches roads for each cell separately.
+        This prevents memory exhaustion on dense road networks.
+        """
+        import gc
+
+        from shapely.geometry import box
+
+        # Get bounding box
+        bounds = boundary_gdf.total_bounds  # [minx, miny, maxx, maxy]
+
+        # Determine grid size based on state area
+        width = bounds[2] - bounds[0]
+        height = bounds[3] - bounds[1]
+        area = width * height
+
+        # Adaptive grid size: larger states get more chunks
+        if area > 20:  # Very large state (e.g., Texas, California)
+            grid_size = 6
+        elif area > 10:  # Large state (e.g., Nevada, Montana)
+            grid_size = 4
+        else:  # Medium state (e.g., Pennsylvania, Georgia)
+            grid_size = 3
+
+        print(
+            f"Dividing into {grid_size}×{grid_size} grid ({grid_size**2} chunks)"
+        )
+
+        # Create grid cells
+        x_step = width / grid_size
+        y_step = height / grid_size
+
+        all_edges = []
+        successful_chunks = 0
+
+        for i in range(grid_size):
+            for j in range(grid_size):
+                chunk_num = i * grid_size + j + 1
+
+                # Create chunk bounding box
+                minx = bounds[0] + j * x_step
+                maxx = bounds[0] + (j + 1) * x_step
+                miny = bounds[1] + i * y_step
+                maxy = bounds[1] + (i + 1) * y_step
+
+                chunk_box = box(minx, miny, maxx, maxy)
+
+                # Check if chunk intersects state boundary
+                state_poly = boundary_gdf.geometry.iloc[0]
+                if not chunk_box.intersects(state_poly):
+                    print(
+                        f"Chunk {chunk_num}/{grid_size**2}: Skipping (outside state)"
+                    )
+                    continue
+
+                # Fetch roads for this chunk
+                try:
+                    print(f"Chunk {chunk_num}/{grid_size**2}: Fetching...")
+
+                    if road_filter:
+                        G = ox.graph_from_polygon(chunk_box,
+                                                  network_type='drive',
+                                                  custom_filter=road_filter,
+                                                  simplify=True)
+                    else:
+                        G = ox.graph_from_polygon(chunk_box,
+                                                  network_type='drive',
+                                                  simplify=True)
+
+                    if len(G.edges) == 0:
+                        print(
+                            f"Chunk {chunk_num}/{grid_size**2}: No roads found"
+                        )
+                        continue
+
+                    # Convert to GeoDataFrame
+                    chunk_edges = ox.graph_to_gdfs(G, nodes=False, edges=True)
+
+                    # Keep only essential columns
+                    essential_cols = ['geometry', 'highway', 'length']
+                    if 'name' in chunk_edges.columns:
+                        essential_cols.append('name')
+                    chunk_edges = chunk_edges[[
+                        col for col in essential_cols
+                        if col in chunk_edges.columns
+                    ]]
+
+                    # Clip to state boundary
+                    chunk_edges = chunk_edges[chunk_edges.geometry.intersects(
+                        state_poly)]
+
+                    print(
+                        f"Chunk {chunk_num}/{grid_size**2}: Got {len(chunk_edges):,} roads"
+                    )
+
+                    all_edges.append(chunk_edges)
+                    successful_chunks += 1
+
+                    # Force garbage collection after each chunk
+                    del G, chunk_edges
+                    gc.collect()
+
+                except Exception as e:
+                    print(
+                        f"Chunk {chunk_num}/{grid_size**2}: Failed ({e}), skipping..."
+                    )
+                    continue
+
+        if not all_edges:
+            raise RuntimeError("No roads fetched successfully")
+
+        print(f"Successfully fetched {successful_chunks} chunks, combining...")
+
+        # Combine all chunks
+        combined = gpd.GeoDataFrame(pd.concat(all_edges, ignore_index=True))
+
+        # Remove duplicates (roads that appear in multiple chunks)
+        print("Removing duplicate roads between chunks...")
+        original_count = len(combined)
+        combined = combined.drop_duplicates(subset=['geometry'])
+        removed = original_count - len(combined)
+        if removed > 0:
+            print(f"Removed {removed:,} duplicates")
+
+        return combined
+
     def fetch_roads(
             self,
             boundary: Optional[gpd.GeoDataFrame] = None) -> gpd.GeoDataFrame:
@@ -121,68 +277,36 @@ class DataFetcher:
             boundary_wgs84 = boundary.to_crs('EPSG:4326')
             polygon = boundary_wgs84.geometry.iloc[0]
 
+            # Calculate state size to determine fetching strategy
+            bounds = boundary_wgs84.total_bounds  # [minx, miny, maxx, maxy]
+            area_deg2 = (bounds[2] - bounds[0]) * (bounds[3] - bounds[1])
+
+            # For large or dense states, use chunked fetching to prevent memory issues
+            # Dense eastern states or large western states need this
+            use_chunks = area_deg2 > 5.0  # ~5 degree² = need chunking
+
             # Configure OSMnx
             ox.settings.use_cache = True
             ox.settings.log_console = True
 
-            # Fetch road network
-            # Using custom filter for road types
+            # Build road type filter
             road_types = self.config.road_types
             if road_types:
-                # Build custom filter
                 road_filter = '["highway"~"' + '|'.join(road_types) + '"]'
-                G = ox.graph_from_polygon(polygon,
-                                          network_type='drive',
-                                          custom_filter=road_filter,
-                                          simplify=False)
             else:
-                # Use default drive network
-                G = ox.graph_from_polygon(polygon,
-                                          network_type='drive',
-                                          simplify=False)
+                road_filter = None
 
-            print(f"Downloaded graph with {len(G.edges)} edges")
+            if use_chunks:
+                print(
+                    f"State is large (area={area_deg2:.1f}°²), using chunked fetching to prevent memory issues..."
+                )
+                edges = self._fetch_roads_chunked(polygon, road_filter,
+                                                  boundary_wgs84)
+            else:
+                print("Fetching roads in single query...")
+                edges = self._fetch_roads_simple(polygon, road_filter)
 
-            # Simplify graph to reduce memory usage (merges consecutive segments)
-            # This is CRITICAL for dense road networks like Pennsylvania
-            print("Simplifying graph to reduce memory usage...")
-            G = ox.simplify_graph(G)
-
-            edge_count = len(G.edges)
-            print(
-                f"Simplified to {edge_count} edges (merged consecutive segments)"
-            )
-
-            # For very large graphs (>1M edges), use more aggressive filtering
-            if edge_count > 1_000_000:
-                print(f"WARNING: Graph still too large ({edge_count:,} edges)")
-                print("Re-fetching with only major roads (motorway, trunk, primary, secondary)...")
-                
-                # More restrictive filter - only major roads
-                major_roads = ['motorway', 'trunk', 'primary', 'secondary',
-                              'motorway_link', 'trunk_link', 'primary_link', 'secondary_link']
-                road_filter = '["highway"~"' + '|'.join(major_roads) + '"]'
-                
-                G = ox.graph_from_polygon(polygon,
-                                          network_type='drive',
-                                          custom_filter=road_filter,
-                                          simplify=True)  # Simplify immediately
-                
-                edge_count = len(G.edges)
-                print(f"Re-downloaded and simplified to {edge_count:,} edges (major roads only)")
-
-            # Convert to GeoDataFrame using memory-efficient method
-            print("Converting to GeoDataFrame...")
-            
-            # Keep only essential columns to reduce memory
-            edges = ox.graph_to_gdfs(G, nodes=False, edges=True)
-            
-            essential_cols = ['geometry', 'highway', 'length']
-            if 'name' in edges.columns:
-                essential_cols.append('name')
-            edges = edges[essential_cols]
-
-            print(f"Converted {len(edges)} road segments")
+            print(f"Total road segments: {len(edges):,}")
 
             # Save to file
             print("Saving to file...")

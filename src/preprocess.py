@@ -155,7 +155,7 @@ class DataPreprocessor:
             chunk_size = 25000  # Medium chunks
         else:
             chunk_size = 50000  # Default
-        
+
         n_chunks = int(np.ceil(len(roads) / chunk_size))
 
         if n_chunks > 1:
