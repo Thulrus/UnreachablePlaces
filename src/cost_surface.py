@@ -241,29 +241,49 @@ class CostSurfaceGenerator:
 
     def generate_cost_surface(
             self,
-            dem_path: str,
-            landcover_path: str,
+            dem_path: Optional[str],
+            landcover_path: Optional[str],
             output_path: Optional[str] = None) -> Tuple[np.ndarray, dict]:
         """
         Generate composite cost surface from DEM and land cover.
         
         Args:
-            dem_path: Path to DEM raster
-            landcover_path: Path to land cover raster
+            dem_path: Path to DEM raster (None to use flat terrain assumption)
+            landcover_path: Path to land cover raster (None to use uniform cost)
             output_path: Optional path to save cost surface
             
         Returns:
             Tuple of (cost_surface array, profile dict)
         """
         logger.info("Generating composite cost surface")
-
-        # Calculate slope
-        slope_degrees = self.calculate_slope(dem_path)
-        slope_costs = slope_cost_factor(slope_degrees, self.config)
-
-        # Resample land cover
-        landcover = self.resample_landcover(landcover_path, dem_path)
-        landcover_costs = landcover_cost_factor(landcover)
+        
+        # Determine reference raster (use whichever is available)
+        reference_path = dem_path if dem_path else landcover_path
+        if not reference_path:
+            raise ValueError("Must provide at least DEM or land cover")
+        
+        # Get reference shape and profile
+        with rasterio.open(reference_path) as src:
+            reference_shape = (src.height, src.width)
+            profile = src.profile
+        
+        # Calculate slope costs
+        if dem_path:
+            slope_degrees = self.calculate_slope(dem_path)
+            slope_costs = slope_cost_factor(slope_degrees, self.config)
+        else:
+            # No DEM: assume flat terrain (cost = 1.0)
+            logger.info("No DEM provided, assuming flat terrain (slope cost = 1.0)")
+            slope_costs = np.ones(reference_shape, dtype=np.float32)
+        
+        # Calculate land cover costs
+        if landcover_path:
+            landcover = self.resample_landcover(landcover_path, reference_path)
+            landcover_costs = landcover_cost_factor(landcover)
+        else:
+            # No land cover: use uniform cost (cost = 1.0)
+            logger.info("No land cover provided, using uniform cost (landcover cost = 1.0)")
+            landcover_costs = np.ones(reference_shape, dtype=np.float32)
 
         # Combine costs with weights
         # Cost = slope_cost^slope_weight * landcover_cost^landcover_weight
@@ -278,10 +298,8 @@ class CostSurfaceGenerator:
         )
         logger.info(f"Cost surface mean: {cost_surface.mean():.2f}")
 
-        # Get profile from DEM
-        with rasterio.open(dem_path) as src:
-            profile = src.profile
-            profile.update(dtype=rasterio.float32, count=1, nodata=-9999)
+        # Update profile for output
+        profile.update(dtype=rasterio.float32, count=1, nodata=-9999)
 
         # Save if requested
         if output_path:
@@ -301,36 +319,55 @@ class CostSurfaceGenerator:
         Returns:
             Path to generated cost surface file
         """
+        from .extract_terrain import ensure_terrain_data
+        
         state_lower = state_name.lower()
 
-        # Define paths - read from raw, write to processed
-        dem_path = self.raw_dir / f"{state_lower}_dem.tif"
-        landcover_path = self.raw_dir / f"{state_lower}_landcover.tif"
+        # Define output paths
         road_mask_path = self.processed_dir / f"{state_lower}_road_mask.tif"
         slope_path = self.processed_dir / f"{state_lower}_slope.tif"
         cost_path = self.processed_dir / f"{state_lower}_cost_surface.tif"
-
-        # Check inputs exist
-        if not dem_path.exists():
-            raise FileNotFoundError(f"DEM not found: {dem_path}")
-        if not landcover_path.exists():
-            raise FileNotFoundError(f"Land cover not found: {landcover_path}")
 
         # Check if road mask exists (needed for resampling target)
         if not road_mask_path.exists():
             raise FileNotFoundError(f"Road mask not found: {road_mask_path}. "
                                     "Please run preprocessing first.")
 
+        # Ensure terrain data exists (auto-extracts from national files if configured)
+        print(f"\nChecking terrain data for {state_name}...")
+        dem_path, landcover_path = ensure_terrain_data(self.config, state_name)
+        
+        if not dem_path and not landcover_path:
+            raise FileNotFoundError(
+                "Neither DEM nor land cover available. Cost-distance requires at least one.\n"
+                "Either:\n"
+                "  1. Configure local_file paths in config.yaml, or\n"
+                "  2. Manually download terrain data for this state"
+            )
+
         # Generate outputs
         logger.info(f"Processing cost surface for {state_name}")
 
-        # Calculate and save slope
-        self.calculate_slope(str(dem_path), str(slope_path))
+        # Calculate slope if DEM is available
+        if dem_path:
+            self.calculate_slope(str(dem_path), str(slope_path))
+        else:
+            print("Skipping slope calculation (no DEM, assuming flat terrain)")
+            slope_path = None
 
-        # Generate cost surface at DEM resolution
-        print("Generating cost surface at DEM resolution...")
+        # Generate cost surface (using available terrain data)
+        if dem_path and landcover_path:
+            print("Generating cost surface with DEM and land cover...")
+        elif dem_path:
+            print("Generating cost surface with DEM only (no land cover)...")
+        else:
+            print("Generating cost surface with land cover only (flat terrain assumed)...")
+            
         cost_surface_highres, profile = self.generate_cost_surface(
-            str(dem_path), str(landcover_path), None)
+            str(dem_path) if dem_path else None, 
+            str(landcover_path) if landcover_path else None, 
+            None
+        )
 
         # Resample cost surface to match road mask resolution
         print(
