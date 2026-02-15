@@ -4,8 +4,8 @@
 # Common FIPS codes: AK=02, AZ=04, CA=06, CO=08, FL=12, MT=30, NV=32, NM=35, TX=48, UT=49, WY=56
 # Full list: see SWITCH_STATES.md
 state:
-  name: "Pennsylvania"
-  fips_code: "42"  # Pennsylvania FIPS code
+  name: "California"
+  fips_code: "06"  # California FIPS code
 
 projection:
   # EPSG:5070 - NAD83 / Conus Albers (distance-preserving for CONUS)
@@ -60,6 +60,10 @@ analysis:
   # Minimum separation distance between top locations (km)
   # This prevents all top N from being clustered in the same area
   min_separation_km: 25
+  
+  # Find nearest cities to unreachable points (requires OpenStreetMap API)
+  # Warning: This can be slow for large areas
+  find_nearest_cities: false
   
   # Land cover types to exclude from "unreachable location" candidates
   # These areas can still act as barriers, but won't be marked as destinations

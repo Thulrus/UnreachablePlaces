@@ -195,6 +195,173 @@ class UnreachabilityAnalyzer:
 
         return results
 
+    def find_elevation_extremes(
+            self,
+            dem: np.ndarray,
+            transform: Affine,
+            crs: str,
+            land_mask: Optional[np.ndarray] = None) -> Dict:
+        """
+        Find highest and lowest elevation points in the state.
+        
+        Args:
+            dem: Digital elevation model array
+            transform: Raster transform
+            crs: Coordinate reference system
+            land_mask: Optional boolean mask to exclude water bodies
+            
+        Returns:
+            Dictionary with highest_point and lowest_point info
+        """
+        print("\nFinding elevation extremes...")
+
+        import geopandas as gpd
+        from shapely.geometry import Point
+
+        # Apply land mask if provided
+        working_dem = dem.copy().astype(float)
+        if land_mask is not None:
+            working_dem[~land_mask] = np.nan
+
+        # Filter out nodata values (typically -32768 or other sentinel values)
+        working_dem[working_dem < -100] = np.nan  # Below reasonable elevation
+        working_dem[working_dem > 10000] = np.nan  # Above reasonable elevation
+
+        # Find highest point
+        max_elev = np.nanmax(working_dem)
+        max_indices = np.where(working_dem == max_elev)
+        max_row, max_col = max_indices[0][0], max_indices[1][0]
+        max_x, max_y = self.pixel_to_coords(max_row, max_col, transform)
+
+        # Convert to lat/lon
+        max_point_gdf = gpd.GeoDataFrame(geometry=[Point(max_x, max_y)],
+                                         crs=crs)
+        max_point_wgs84 = max_point_gdf.to_crs('EPSG:4326')
+        max_lon, max_lat = max_point_wgs84.geometry.iloc[
+            0].x, max_point_wgs84.geometry.iloc[0].y
+
+        print(f"  Highest: {max_elev:.1f} m at ({max_lat:.6f}, {max_lon:.6f})")
+
+        # Find lowest point
+        min_elev = np.nanmin(working_dem)
+        min_indices = np.where(working_dem == min_elev)
+        min_row, min_col = min_indices[0][0], min_indices[1][0]
+        min_x, min_y = self.pixel_to_coords(min_row, min_col, transform)
+
+        # Convert to lat/lon
+        min_point_gdf = gpd.GeoDataFrame(geometry=[Point(min_x, min_y)],
+                                         crs=crs)
+        min_point_wgs84 = min_point_gdf.to_crs('EPSG:4326')
+        min_lon, min_lat = min_point_wgs84.geometry.iloc[
+            0].x, min_point_wgs84.geometry.iloc[0].y
+
+        print(f"  Lowest: {min_elev:.1f} m at ({min_lat:.6f}, {min_lon:.6f})")
+
+        return {
+            'highest_point': {
+                'elevation_m': float(max_elev),
+                'latitude': float(max_lat),
+                'longitude': float(max_lon),
+                'x_projected': float(max_x),
+                'y_projected': float(max_y)
+            },
+            'lowest_point': {
+                'elevation_m': float(min_elev),
+                'latitude': float(min_lat),
+                'longitude': float(min_lon),
+                'x_projected': float(min_x),
+                'y_projected': float(min_y)
+            }
+        }
+
+    def find_nearest_cities(self, unreachable_points: List[Dict],
+                            boundary: 'gpd.GeoDataFrame') -> List[Dict]:
+        """
+        Find nearest city/town to each unreachable point.
+        
+        Args:
+            unreachable_points: List of unreachable point dictionaries
+            boundary: State boundary GeoDataFrame
+            
+        Returns:
+            Updated list with nearest_city information added
+        """
+        print("\nFinding nearest cities to unreachable points...")
+
+        import geopandas as gpd
+        import osmnx as ox
+        from shapely.geometry import Point
+
+        # Query cities for each point within a local radius
+        search_radius_km = 100  # Search within 100km of each point
+
+        for point_dict in unreachable_points:
+            try:
+                # Create point geometry in WGS84
+                point_geom_proj = Point(point_dict['x_projected'],
+                                        point_dict['y_projected'])
+                point_gdf = gpd.GeoDataFrame([point_dict],
+                                             geometry=[point_geom_proj],
+                                             crs=boundary.crs)
+                point_wgs84 = point_gdf.to_crs('EPSG:4326')
+                lat, lon = point_wgs84.geometry.iloc[
+                    0].y, point_wgs84.geometry.iloc[0].x
+
+                # Query places within radius using geocode_to_gdf
+                print(
+                    f"  Point #{point_dict['rank']}: Searching within {search_radius_km}km..."
+                )
+
+                tags = {'place': ['city', 'town', 'village']}
+                places = ox.features_from_point(
+                    (lat, lon),
+                    tags=tags,
+                    dist=search_radius_km * 1000  # Convert to meters
+                )
+
+                if not places.empty:
+                    # Filter and convert to points
+                    places = places[places.geometry.notna()]
+                    places = places[~places.geometry.is_empty]
+                    places['geometry'] = places['geometry'].centroid
+                    places = places[places.geometry.notna()]
+
+                    # Convert to projected CRS for distance calculation
+                    places_gdf = gpd.GeoDataFrame(places,
+                                                  geometry='geometry',
+                                                  crs='EPSG:4326')
+                    places_gdf = places_gdf.to_crs(boundary.crs)
+
+                    # Calculate distances
+                    distances = places_gdf.geometry.distance(point_geom_proj)
+                    nearest_idx = distances.idxmin()
+                    nearest_city = places_gdf.loc[nearest_idx]
+                    nearest_distance = distances.loc[nearest_idx]
+
+                    # Get city info
+                    city_name = nearest_city.get('name', 'Unknown')
+                    place_type = nearest_city.get('place', 'place')
+
+                    point_dict['nearest_city'] = {
+                        'name': str(city_name),
+                        'type': str(place_type),
+                        'distance_m': float(nearest_distance),
+                        'distance_km': float(nearest_distance / 1000)
+                    }
+
+                    print(
+                        f"    → {city_name} ({place_type}), {nearest_distance/1000:.1f} km away"
+                    )
+                else:
+                    print(f"    → No cities found within {search_radius_km}km")
+                    point_dict['nearest_city'] = None
+
+            except Exception as e:
+                print(f"    → Error: {e}")
+                point_dict['nearest_city'] = None
+
+        return unreachable_points
+
     def analyze_all(self, distance_data: dict, processed_data: dict) -> Dict:
         """
         Run full analysis pipeline.
@@ -306,6 +473,20 @@ class UnreachabilityAnalyzer:
         print(f"  Mean: {stats['mean_distance_km']:.2f} km")
         print(f"  Median: {stats['median_distance_km']:.2f} km")
 
+        # Find elevation extremes if DEM available
+        elevation_extremes = None
+        if 'dem' in distance_data:
+            print("\n5. Finding elevation extremes...")
+            elevation_extremes = self.find_elevation_extremes(
+                distance_data['dem'], transform, crs, land_mask)
+
+        # Find nearest cities to unreachable points (if enabled)
+        if self.config.get('analysis.find_nearest_cities', False):
+            print("\n6. Finding nearest cities...")
+            top_n_geo = self.find_nearest_cities(top_n_geo, boundary)
+        else:
+            print("\n6. Skipping nearest cities (disabled in config)")
+
         # Compile results
         results = {
             'state': self.config.state_name,
@@ -329,12 +510,18 @@ class UnreachabilityAnalyzer:
             'statistics': stats
         }
 
-        # Save results
-        print("\n5. Saving results...")
-        results_file = self.config.get('output.results_file',
-                                       'outputs/results.json')
-        results_path = Path(results_file)
-        results_path.parent.mkdir(parents=True, exist_ok=True)
+        # Add elevation extremes if available
+        if elevation_extremes:
+            results['elevation_extremes'] = elevation_extremes
+
+        # Save results to state-specific folder
+        print("\n7. Saving results...")
+        state_name = self.config.state_name.lower()
+        outputs_dir = self.config.get_path('outputs')
+        state_output_dir = outputs_dir / state_name
+        state_output_dir.mkdir(parents=True, exist_ok=True)
+
+        results_path = state_output_dir / 'results.json'
 
         with open(results_path, 'w') as f:
             json.dump(results, f, indent=2)

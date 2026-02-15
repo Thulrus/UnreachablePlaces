@@ -258,6 +258,38 @@ def find_unreachable(ctx):
             'metadata': metadata
         }
 
+        # Load DEM if available (for elevation extremes)
+        dem_file = raw_state_folder / "dem.tif"
+        if dem_file.exists():
+            click.echo(f"Loading elevation data for analysis...")
+            with rasterio.open(dem_file) as src:
+                # Read DEM and resample to match distance field if needed
+                dem = src.read(1)
+
+                # Check if dimensions match
+                if dem.shape != distance_field.shape:
+                    # Resample DEM to match distance field
+                    from rasterio.warp import Resampling, reproject
+                    dem_resampled = np.zeros(distance_field.shape,
+                                             dtype=dem.dtype)
+                    reproject(
+                        source=dem,
+                        destination=dem_resampled,
+                        src_transform=src.transform,
+                        src_crs=src.crs,
+                        dst_transform=metadata['transform'],
+                        dst_crs=metadata['crs'],
+                        resampling=Resampling.
+                        bilinear  # Bilinear for continuous data
+                    )
+                    dem = dem_resampled
+
+                distance_data['dem'] = dem
+        else:
+            click.echo(
+                f"  Note: No elevation data found, elevation extremes will not be calculated"
+            )
+
         # Load landcover if available (for filtering out water bodies)
         if landcover_file.exists():
             click.echo(f"Loading land cover data to exclude water bodies...")

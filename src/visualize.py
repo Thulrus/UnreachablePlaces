@@ -38,7 +38,8 @@ class Visualizer:
                           boundary: gpd.GeoDataFrame,
                           roads: gpd.GeoDataFrame,
                           unreachable_point: Dict,
-                          metadata: Dict,
+                          metadata: Dict = None,
+                          elevation_extremes: Optional[Dict] = None,
                           output_path: Optional[Path] = None) -> Path:
         """
         Create a static map using matplotlib.
@@ -49,6 +50,7 @@ class Visualizer:
             roads: Roads GeoDataFrame
             unreachable_point: Dictionary with unreachable point info
             metadata: Raster metadata
+            elevation_extremes: Optional dictionary with highest/lowest points
             output_path: Path to save figure. If None, uses default.
             
         Returns:
@@ -58,8 +60,10 @@ class Visualizer:
 
         if output_path is None:
             state_name = self.config.state_name.lower()
-            output_path = self.config.get_path(
-                'maps') / f"{state_name}_unreachability_map.png"
+            outputs_dir = self.config.get_path('outputs')
+            state_output_dir = outputs_dir / state_name / 'maps'
+            state_output_dir.mkdir(parents=True, exist_ok=True)
+            output_path = state_output_dir / "unreachability_map.png"
 
         # Create figure
         figsize = self.config.get('visualization.figsize', [12, 10])
@@ -138,6 +142,52 @@ class Visualizer:
                     fontsize=10,
                     fontweight='bold')
 
+        # Plot elevation extremes if provided
+        if elevation_extremes is not None:
+            # Highest point
+            if 'highest_point' in elevation_extremes:
+                high = elevation_extremes['highest_point']
+                ax.plot(high['x_projected'],
+                        high['y_projected'],
+                        '^',
+                        markersize=15,
+                        color='darkgreen',
+                        markeredgecolor='white',
+                        markeredgewidth=1.5,
+                        label='Highest Elevation',
+                        zorder=5)
+
+                ax.annotate(f"{high['elevation_m']:.0f} m",
+                            xy=(high['x_projected'], high['y_projected']),
+                            xytext=(15, 15),
+                            textcoords='offset points',
+                            bbox=dict(boxstyle='round,pad=0.5',
+                                      facecolor='lightgreen',
+                                      alpha=0.8),
+                            fontsize=9)
+
+            # Lowest point
+            if 'lowest_point' in elevation_extremes:
+                low = elevation_extremes['lowest_point']
+                ax.plot(low['x_projected'],
+                        low['y_projected'],
+                        'v',
+                        markersize=15,
+                        color='darkblue',
+                        markeredgecolor='white',
+                        markeredgewidth=1.5,
+                        label='Lowest Elevation',
+                        zorder=5)
+
+                ax.annotate(f"{low['elevation_m']:.0f} m",
+                            xy=(low['x_projected'], low['y_projected']),
+                            xytext=(15, -20),
+                            textcoords='offset points',
+                            bbox=dict(boxstyle='round,pad=0.5',
+                                      facecolor='lightblue',
+                                      alpha=0.8),
+                            fontsize=9)
+
         # Set labels and title
         ax.set_xlabel('Easting (m)', fontsize=12)
         ax.set_ylabel('Northing (m)', fontsize=12)
@@ -192,8 +242,10 @@ class Visualizer:
 
         if output_path is None:
             state_name = self.config.state_name.lower()
-            output_path = self.config.get_path(
-                'maps') / f"{state_name}_top{n}_labeled_map.png"
+            outputs_dir = self.config.get_path('outputs')
+            state_output_dir = outputs_dir / state_name / 'maps'
+            state_output_dir.mkdir(parents=True, exist_ok=True)
+            output_path = state_output_dir / f"top{n}_labeled_map.png"
 
         # Create figure
         figsize = self.config.get('visualization.figsize', [12, 10])
@@ -271,7 +323,14 @@ class Visualizer:
             offset_y = 20 if rank <= 5 else -20
             ha = 'left' if rank % 2 == 0 else 'right'
 
-            ax.annotate(f"#{rank}: {dist_km:.1f} km",
+            # Build annotation text
+            annotation_text = f"#{rank}: {dist_km:.1f} km"
+            if 'nearest_city' in point and point['nearest_city']:
+                city = point['nearest_city']
+                city_dist = city['distance_km']
+                annotation_text += f"\nNear {city['name']} ({city_dist:.0f} km)"
+
+            ax.annotate(annotation_text,
                         xy=(point_x, point_y),
                         xytext=(offset_x, offset_y),
                         textcoords='offset points',
@@ -354,8 +413,10 @@ class Visualizer:
 
         if output_path is None:
             state_name = self.config.state_name.lower()
-            output_path = self.config.get_path(
-                'maps') / f"{state_name}_unreachability_interactive.html"
+            outputs_dir = self.config.get_path('outputs')
+            state_output_dir = outputs_dir / state_name / 'maps'
+            state_output_dir.mkdir(parents=True, exist_ok=True)
+            output_path = state_output_dir / "unreachability_interactive.html"
 
         # Convert to WGS84 for folium
         boundary_wgs84 = boundary.to_crs('EPSG:4326')
@@ -512,6 +573,7 @@ class Visualizer:
         boundary = processed_data['boundary']
         roads = processed_data['roads']
         unreachable_point = results['most_unreachable_point']
+        elevation_extremes = results.get('elevation_extremes', None)
 
         # Get top N points dynamically (could be top_5, top_10, etc.)
         top_n_key = [
@@ -528,7 +590,7 @@ class Visualizer:
             print("\n1. Creating static map...")
             static_path = self.create_static_map(distance_field, boundary,
                                                  roads, unreachable_point,
-                                                 metadata)
+                                                 metadata, elevation_extremes)
             outputs['static_map'] = static_path
 
         # Labeled map with top N
