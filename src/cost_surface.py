@@ -293,9 +293,10 @@ class CostSurfaceGenerator:
         if landcover_path:
             landcover = self.resample_landcover(landcover_path, reference_path)
             landcover_costs = landcover_cost_factor(landcover)
-            
+
             # Identify water bodies (will be set to nodata later)
-            water_mask = (landcover == 11) | (landcover == 12)  # Open Water or Ice/Snow
+            water_mask = (landcover == 11) | (landcover == 12
+                                              )  # Open Water or Ice/Snow
         else:
             # No land cover: use uniform cost (cost = 1.0)
             logger.info(
@@ -311,7 +312,7 @@ class CostSurfaceGenerator:
 
         # Ensure minimum cost of 1.0
         cost_surface = np.maximum(cost_surface, 1.0)
-        
+
         # Set water bodies to nodata (impassable barriers)
         # This forces routing AROUND water, not through it
         # Prevents cost-distance inflation for shoreline areas
@@ -323,7 +324,8 @@ class CostSurfaceGenerator:
         logger.info(
             f"Cost surface range: {cost_surface.min():.2f} to {cost_surface.max():.2f}"
         )
-        logger.info(f"Cost surface mean: {cost_surface[cost_surface > 0].mean():.2f}")
+        logger.info(
+            f"Cost surface mean: {cost_surface[cost_surface > 0].mean():.2f}")
 
         # Update profile for output
         profile.update(dtype=rasterio.float32, count=1, nodata=-9999)

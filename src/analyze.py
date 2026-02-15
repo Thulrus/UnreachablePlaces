@@ -76,7 +76,7 @@ class UnreachabilityAnalyzer:
             # Set excluded areas to NaN
             working_field[~land_mask] = np.nan
             print(f"  Applying land mask (excluding water/ice)")
-        
+
         # Also exclude infinite values (unreachable islands/areas)
         working_field[np.isinf(working_field)] = np.nan
 
@@ -153,7 +153,7 @@ class UnreachabilityAnalyzer:
         if land_mask is not None:
             working_field[~land_mask] = np.nan
             print(f"  Applying land mask (excluding water/ice)")
-        
+
         # Exclude infinite values (unreachable islands/areas)
         working_field[np.isinf(working_field)] = np.nan
 
