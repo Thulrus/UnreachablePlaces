@@ -60,12 +60,17 @@ analysis:
   # Minimum separation distance between top locations (km)
   # This prevents all top N from being clustered in the same area
   min_separation_km: 25
+  
+  # Land cover types to exclude from "unreachable location" candidates
+  # These areas can still act as barriers, but won't be marked as destinations
+  # NLCD codes: 11=Open Water, 12=Perennial Ice/Snow
+  exclude_landcover: [11, 12]
 
 cost_distance:
   # Enable terrain-aware cost-distance analysis
   # When false (default), uses simple Euclidean distance
   # When true, incorporates slope and land cover factors
-  enabled: false
+  enabled: true
   
   # Resolution for cost surface calculations (meters)
   # Should match raster.resolution for consistency

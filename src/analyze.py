@@ -5,7 +5,7 @@ This module extracts the most unreachable point(s) from the distance field.
 """
 import json
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 from rasterio.transform import Affine
@@ -25,21 +25,60 @@ class UnreachabilityAnalyzer:
         """
         self.config = config or get_config()
 
-    def find_maximum(self,
-                     distance_field: np.ndarray) -> Tuple[int, int, float]:
+    def create_land_mask(self, landcover: np.ndarray) -> np.ndarray:
+        """
+        Create a mask of valid land areas (excluding water bodies, etc.).
+        
+        This prevents water bodies from being identified as "unreachable locations"
+        while still allowing them to act as barriers in cost-distance calculations.
+        
+        Args:
+            landcover: Land cover classification array (NLCD codes)
+            
+        Returns:
+            Boolean mask where True = valid land, False = excluded (water/ice/etc)
+        """
+        # NLCD codes to exclude from being "unreachable locations"
+        # These are non-land features that aren't interesting destinations
+        excluded_codes = self.config.get(
+            'analysis.exclude_landcover',
+            [
+                11,  # Open Water
+                12,  # Perennial Ice/Snow
+            ])
+
+        # Create mask: True for valid land, False for excluded areas
+        mask = np.ones(landcover.shape, dtype=bool)
+        for code in excluded_codes:
+            mask &= (landcover != code)
+
+        return mask
+
+    def find_maximum(
+            self,
+            distance_field: np.ndarray,
+            land_mask: Optional[np.ndarray] = None) -> Tuple[int, int, float]:
         """
         Find the pixel with maximum distance.
         
         Args:
             distance_field: Distance field array (may contain NaN for masked areas)
+            land_mask: Optional boolean mask where True = valid land to consider
             
         Returns:
             Tuple of (row, col, distance)
         """
         print("Finding maximum distance pixel...")
 
+        # Apply land mask if provided
+        working_field = distance_field.copy()
+        if land_mask is not None:
+            # Set excluded areas to NaN
+            working_field[~land_mask] = np.nan
+            print(f"  Applying land mask (excluding water/ice)")
+
         # Find maximum ignoring NaN
-        max_distance = np.nanmax(distance_field)
+        max_distance = np.nanmax(working_field)
 
         # Find pixel coordinates of maximum
         max_indices = np.where(distance_field == max_distance)
@@ -72,11 +111,13 @@ class UnreachabilityAnalyzer:
         return x, y
 
     def find_top_n_unreachable(
-            self,
-            distance_field: np.ndarray,
-            n: int = 5,
-            min_separation_km: float = 25.0,
-            resolution_m: float = 250.0) -> List[Tuple[int, int, float]]:
+        self,
+        distance_field: np.ndarray,
+        n: int = 5,
+        min_separation_km: float = 25.0,
+        resolution_m: float = 250.0,
+        land_mask: Optional[np.ndarray] = None
+    ) -> List[Tuple[int, int, float]]:
         """
         Find the top N most unreachable pixels with minimum separation.
         
@@ -88,6 +129,7 @@ class UnreachabilityAnalyzer:
             n: Number of top locations to find
             min_separation_km: Minimum separation between locations (km)
             resolution_m: Pixel resolution in meters
+            land_mask: Optional boolean mask where True = valid land to consider
             
         Returns:
             List of (row, col, distance) tuples, spatially separated
@@ -103,6 +145,11 @@ class UnreachabilityAnalyzer:
 
         # Create a working copy of the distance field
         working_field = distance_field.copy()
+
+        # Apply land mask if provided
+        if land_mask is not None:
+            working_field[~land_mask] = np.nan
+            print(f"  Applying land mask (excluding water/ice)")
 
         # Create coordinate grids for distance calculation
         rows, cols = np.meshgrid(np.arange(working_field.shape[0]),
@@ -163,9 +210,21 @@ class UnreachabilityAnalyzer:
         crs = metadata['crs']
         boundary = processed_data['boundary']
 
+        # Create land mask if landcover data is available
+        land_mask = None
+        if 'landcover' in distance_data:
+            print("\nCreating land mask to exclude water bodies...")
+            landcover = distance_data['landcover']
+            land_mask = self.create_land_mask(landcover)
+            excluded_pixels = np.sum(~land_mask)
+            total_pixels = land_mask.size
+            print(
+                f"  Excluding {excluded_pixels:,} pixels ({excluded_pixels/total_pixels*100:.1f}%)"
+            )
+
         # Find maximum unreachable point
         print("\n1. Finding most unreachable point...")
-        row, col, max_distance = self.find_maximum(distance_field)
+        row, col, max_distance = self.find_maximum(distance_field, land_mask)
 
         # Convert to geographic coordinates
         print("\n2. Converting to geographic coordinates...")
@@ -195,7 +254,8 @@ class UnreachabilityAnalyzer:
             distance_field,
             n=top_n,
             min_separation_km=min_separation_km,
-            resolution_m=resolution_m)
+            resolution_m=resolution_m,
+            land_mask=land_mask)
 
         # Convert all to geographic coordinates
         top_n_geo = []

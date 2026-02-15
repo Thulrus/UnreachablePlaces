@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 import click
+import numpy as np
 
 from .analyze import UnreachabilityAnalyzer
 from .config import Config, get_config, set_config
@@ -214,6 +215,7 @@ def find_unreachable(ctx):
         # Load distance field
         state_name = config.state_name.lower()
         processed_path = config.get_path('processed_data')
+        raw_path = config.get_path('raw_data')
 
         import geopandas as gpd
         import rasterio
@@ -224,6 +226,7 @@ def find_unreachable(ctx):
         else:
             distance_file = processed_path / f"{state_name}_distance.tif"
         boundary_file = processed_path / f"{state_name}_boundary_projected.geojson"
+        landcover_file = raw_path / f"{state_name}_landcover.tif"
 
         if not distance_file.exists():
             click.echo(
@@ -248,6 +251,37 @@ def find_unreachable(ctx):
             'distance_field': distance_field,
             'metadata': metadata
         }
+
+        # Load landcover if available (for filtering out water bodies)
+        if landcover_file.exists():
+            click.echo(f"Loading land cover data to exclude water bodies...")
+            with rasterio.open(landcover_file) as src:
+                # Read landcover and resample to match distance field if needed
+                landcover = src.read(1)
+
+                # Check if dimensions match
+                if landcover.shape != distance_field.shape:
+                    # Resample landcover to match distance field
+                    from rasterio.warp import Resampling, reproject
+                    landcover_resampled = np.zeros(distance_field.shape,
+                                                   dtype=landcover.dtype)
+                    reproject(
+                        source=landcover,
+                        destination=landcover_resampled,
+                        src_transform=src.transform,
+                        src_crs=src.crs,
+                        dst_transform=metadata['transform'],
+                        dst_crs=metadata['crs'],
+                        resampling=Resampling.
+                        nearest  # Nearest for categorical data
+                    )
+                    landcover = landcover_resampled
+
+                distance_data['landcover'] = landcover
+        else:
+            click.echo(
+                f"  Note: No land cover data found, water bodies will not be filtered"
+            )
 
         processed_data = {'boundary': boundary}
 
