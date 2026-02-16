@@ -191,9 +191,16 @@ class Visualizer:
         # Set labels and title
         ax.set_xlabel('Easting (m)', fontsize=12)
         ax.set_ylabel('Northing (m)', fontsize=12)
+
+        # Determine distance method for title
+        if self.config.get('cost_distance.enabled', False):
+            distance_method = 'Cost-Distance (Terrain-Aware)'
+        else:
+            distance_method = 'Euclidean Distance from Roads'
+
         ax.set_title(
             f'Most Unreachable Location in {self.config.state_name}\n'
-            f'Euclidean Distance from Roads',
+            f'{distance_method}',
             fontsize=14,
             fontweight='bold',
             pad=20)
@@ -350,9 +357,16 @@ class Visualizer:
         # Set labels and title
         ax.set_xlabel('Easting (m)', fontsize=12)
         ax.set_ylabel('Northing (m)', fontsize=12)
+
+        # Determine distance method for title
+        if self.config.get('cost_distance.enabled', False):
+            distance_method = 'Cost-Distance (Terrain-Aware)'
+        else:
+            distance_method = 'Euclidean Distance from Roads'
+
         ax.set_title(
             f'Top {n} Most Unreachable Locations in {self.config.state_name}\n'
-            f'Ranked by Euclidean Distance from Roads (Min {self.config.get("analysis.min_separation_km", 25)}km separation)',
+            f'Ranked by {distance_method} (Min {self.config.get("analysis.min_separation_km", 25)}km separation)',
             fontsize=14,
             fontweight='bold',
             pad=20)
